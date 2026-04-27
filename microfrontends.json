@@ -3,7 +3,7 @@
   "applications": {
     "main-portal": {
       "routing": [
-        { "paths": ["/", "/*path*"] }
+        { "paths": ["/", "/:path*"] }
       ]
     },
     "it-tools": {
