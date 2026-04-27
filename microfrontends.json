@@ -1,6 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/microfrontends.json",
   "applications": {
+    "main-portal": {
+      "routing": [
+        { "paths": ["/", "/*path*"] }
+      ]
+    },
     "it-tools": {
       "routing": [
         { "paths": ["/it-tools", "/it-tools/:path*"] }
