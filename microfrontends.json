@@ -7,7 +7,7 @@
         { "paths": ["/it-tools", "/it-tools/:path*"] }
       ]
     },
-    "excel_tool": {
+    "excel-tool": {
       "routing": [
         { "paths": ["/excel-tools", "/excel-tools/:path*"] }
       ]
