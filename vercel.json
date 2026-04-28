@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/excel-tools/:path*",
-      "destination": "https://excel-tools-gilt.vercel.app/excel-tools/:path*"
+      "destination": "https://excel-tools-gilt.vercel.app/:path*"
     },
     { "source": "/:path*", "destination": "/index.html" }
   ]
