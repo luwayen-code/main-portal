@@ -15,14 +15,13 @@ const apps: AppItem[] = [
     icon: '🛠️',
     color: '#18a058',
   },
-  // 后续可在此处添加更多子项目
-  // {
-  //   name: '项目 B',
-  //   description: '项目 B 的描述',
-  //   path: '/project-b',
-  //   icon: '📦',
-  //   color: '#2080f0',
-  // },
+  {
+    name: 'EasyExcel',
+    description: 'Excel表格处理可视化工具，零代码完成数据清洗、汇总、格式检测等操作',
+    path: '/excel-tools',
+    icon: '📊',
+    color: '#1a73e8',
+  },
 ];
 </script>
 
