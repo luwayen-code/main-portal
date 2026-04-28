@@ -1,3 +1,9 @@
 {
-  "rewrites": [{ "source": "/:path*", "destination": "/index.html" }]
+  "rewrites": [
+    {
+      "source": "/excel-tools/:path*",
+      "destination": "https://excel-tools-gilt.vercel.app/excel-tools/:path*"
+    },
+    { "source": "/:path*", "destination": "/index.html" }
+  ]
 }
