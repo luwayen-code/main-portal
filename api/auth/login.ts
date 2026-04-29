@@ -1,14 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { createHmac } from 'crypto';
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 const TOKEN_SECRET = process.env.TOKEN_SECRET || 'change-this-secret-in-production';
 const TOKEN_EXPIRATION = 24 * 60 * 60 * 1000;
 
-// Inline HMAC using Node.js built-in crypto
-const crypto = require('crypto');
-
 function computeHMAC(message: string, secret: string): string {
-  return crypto.createHmac('sha256', secret).update(message).digest('hex');
+  return createHmac('sha256', secret).update(message).digest('hex');
 }
 
 function createToken(expiresInMs: number, secret: string): string {

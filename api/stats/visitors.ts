@@ -1,14 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { kv } from '@vercel/kv';
+import { createHmac } from 'crypto';
 
 const TOKEN_SECRET = process.env.TOKEN_SECRET || 'change-this-secret-in-production';
 const ACTIVE_VISITOR_TTL = 5 * 60 * 1000; // 5 minutes
 
-// Inline HMAC using Node.js built-in crypto
-const crypto = require('crypto');
-
 function computeHMAC(message: string, secret: string): string {
-  return crypto.createHmac('sha256', secret).update(message).digest('hex');
+  return createHmac('sha256', secret).update(message).digest('hex');
 }
 
 function verifyToken(token: string, secret: string): boolean {
