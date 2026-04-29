@@ -4,6 +4,10 @@
       "source": "/excel-tools/:path*",
       "destination": "https://excel-tools-gilt.vercel.app/:path*"
     },
+    {
+      "source": "/it-tools/:path*",
+      "destination": "https://it-tools-six-gules.vercel.app/:path*"
+    },
     { "source": "/:path*", "destination": "/index.html" }
   ]
 }
