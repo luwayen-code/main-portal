@@ -1,47 +1,27 @@
 /**
- * Shared HMAC-based token utilities.
- * Works in both Node.js (serverless functions) and Edge Runtime (middleware).
+ * Shared HMAC-based token utilities for Node.js Serverless Functions.
+ * Uses Node.js native crypto module for reliability.
  */
 
-const encoder = new TextEncoder();
+import { createHmac } from 'node:crypto';
 
-async function getHMACKey(secret: string): Promise<CryptoKey> {
-  return crypto.subtle.importKey(
-    'raw',
-    encoder.encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign', 'verify'],
-  );
-}
-
-async function computeHMAC(message: string, secret: string): Promise<string> {
-  const key = await getHMACKey(secret);
-  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(message));
-  return Array.from(new Uint8Array(signature))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
+function computeHMAC(message: string, secret: string): string {
+  return createHmac('sha256', secret).update(message).digest('hex');
 }
 
 /**
  * Create a token: `{expirationTimestamp}.{hmac}`
  */
-export async function createToken(
-  expiresInMs: number,
-  secret: string,
-): Promise<string> {
+export function createToken(expiresInMs: number, secret: string): string {
   const exp = Date.now() + expiresInMs;
-  const hmac = await computeHMAC(String(exp), secret);
+  const hmac = computeHMAC(String(exp), secret);
   return `${exp}.${hmac}`;
 }
 
 /**
  * Verify a token. Returns true if valid and not expired.
  */
-export async function verifyToken(
-  token: string,
-  secret: string,
-): Promise<boolean> {
+export function verifyToken(token: string, secret: string): boolean {
   const dotIndex = token.indexOf('.');
   if (dotIndex === -1) return false;
 
@@ -51,6 +31,6 @@ export async function verifyToken(
   const exp = parseInt(expStr, 10);
   if (isNaN(exp) || exp < Date.now()) return false;
 
-  const expectedHmac = await computeHMAC(expStr, secret);
+  const expectedHmac = computeHMAC(expStr, secret);
   return providedHmac === expectedHmac;
 }

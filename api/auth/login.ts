@@ -15,20 +15,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { password } = req.body || {};
+  try {
+    const { password } = req.body || {};
 
-  if (!password) {
-    return res.status(400).json({ error: '请输入密码' });
+    if (!password) {
+      return res.status(400).json({ error: '请输入密码' });
+    }
+
+    if (password !== ADMIN_PASSWORD) {
+      return res.status(401).json({ error: '密码错误' });
+    }
+
+    const token = createToken(TOKEN_EXPIRATION, TOKEN_SECRET);
+
+    return res.status(200).json({
+      token,
+      expiresIn: TOKEN_EXPIRATION,
+    });
+  } catch (err) {
+    console.error('Login error:', err);
+    return res.status(500).json({ error: '服务器内部错误', detail: String(err) });
   }
-
-  if (password !== ADMIN_PASSWORD) {
-    return res.status(401).json({ error: '密码错误' });
-  }
-
-  const token = await createToken(TOKEN_EXPIRATION, TOKEN_SECRET);
-
-  return res.status(200).json({
-    token,
-    expiresIn: TOKEN_EXPIRATION,
-  });
 }

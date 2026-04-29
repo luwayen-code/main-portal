@@ -43,7 +43,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const token = authHeader.slice(7);
-  const isValid = await verifyToken(token, TOKEN_SECRET);
+  const isValid = verifyToken(token, TOKEN_SECRET);
   if (!isValid) {
     return res.status(401).json({ error: '令牌无效或已过期' });
   }
