@@ -1,9 +1,29 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { kv } from '@vercel/kv';
-import { verifyToken } from '../_lib/token';
 
 const TOKEN_SECRET = process.env.TOKEN_SECRET || 'change-this-secret-in-production';
 const ACTIVE_VISITOR_TTL = 5 * 60 * 1000; // 5 minutes
+
+// Inline HMAC using Node.js built-in crypto
+const crypto = require('crypto');
+
+function computeHMAC(message: string, secret: string): string {
+  return crypto.createHmac('sha256', secret).update(message).digest('hex');
+}
+
+function verifyToken(token: string, secret: string): boolean {
+  const dotIndex = token.indexOf('.');
+  if (dotIndex === -1) return false;
+
+  const expStr = token.substring(0, dotIndex);
+  const providedHmac = token.substring(dotIndex + 1);
+
+  const exp = parseInt(expStr, 10);
+  if (isNaN(exp) || exp < Date.now()) return false;
+
+  const expectedHmac = computeHMAC(expStr, secret);
+  return providedHmac === expectedHmac;
+}
 
 interface AppInfo {
   key: string;
@@ -59,16 +79,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Get active visitor count from sorted set
         let activeVisitors = 0;
         try {
-          // Clean up expired entries first
           await kv.zremrangebyscore(`active_visitors:${app.key}`, 0, minScore);
-          // Count active visitors
           activeVisitors = await kv.zcount(
             `active_visitors:${app.key}`,
             minScore,
             now,
           );
         } catch {
-          // KV might not be configured
           activeVisitors = 0;
         }
 

@@ -1,15 +1,23 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createToken } from '../_lib/token';
 
-// Admin password - set via environment variable ADMIN_PASSWORD
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
-// Token secret - set via environment variable TOKEN_SECRET
 const TOKEN_SECRET = process.env.TOKEN_SECRET || 'change-this-secret-in-production';
-// Token expiration: 24 hours
 const TOKEN_EXPIRATION = 24 * 60 * 60 * 1000;
 
+// Inline HMAC using Node.js built-in crypto
+const crypto = require('crypto');
+
+function computeHMAC(message: string, secret: string): string {
+  return crypto.createHmac('sha256', secret).update(message).digest('hex');
+}
+
+function createToken(expiresInMs: number, secret: string): string {
+  const exp = Date.now() + expiresInMs;
+  const hmac = computeHMAC(String(exp), secret);
+  return `${exp}.${hmac}`;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Only allow POST
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
     return res.status(405).json({ error: 'Method not allowed' });
