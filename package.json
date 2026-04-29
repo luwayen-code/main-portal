@@ -9,10 +9,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "vue": "^3.3.4"
+    "@vercel/kv": "^3",
+    "vue": "^3.3.4",
+    "vue-router": "^4"
   },
   "devDependencies": {
     "@vercel/microfrontends": "^1",
+    "@vercel/node": "^3",
     "@vitejs/plugin-vue": "^5",
     "typescript": "~5.2.0",
     "vite": "^5"
