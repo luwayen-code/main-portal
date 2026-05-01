@@ -3,6 +3,17 @@ import { kv } from '@vercel/kv';
 // Active visitor TTL: 5 minutes
 const ACTIVE_VISITOR_TTL = 5 * 60 * 1000;
 
+// Beijing timezone offset (UTC+8)
+const BEIJING_OFFSET_MS = 8 * 60 * 60 * 1000;
+
+function getBeijingDateStr(): string {
+  return new Date(Date.now() + BEIJING_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+function getBeijingHour(): number {
+  return new Date(Date.now() + BEIJING_OFFSET_MS).getUTCHours();
+}
+
 // Sub-app prefixes to track
 const TRACKED_PREFIXES = ['/it-tools', '/excel-tools'];
 
@@ -48,8 +59,8 @@ function isPageVisit(pathname: string, accept: string | null): boolean {
 
 async function trackVisit(app: string, visitorHash: string): Promise<void> {
   const now = Date.now();
-  const today = new Date().toISOString().slice(0, 10);
-  const currentHour = new Date().getHours();
+  const today = getBeijingDateStr();
+  const currentHour = getBeijingHour();
 
   // Record active visitor in sorted set (score = timestamp)
   await kv.zadd(`active_visitors:${app}`, {
@@ -62,6 +73,12 @@ async function trackVisit(app: string, visitorHash: string): Promise<void> {
 
   // Increment hourly page view counter
   await kv.incr(`pv_hourly:${app}:${today}:${currentHour}`);
+
+  // Track daily unique visitor (UV)
+  await kv.sadd(`uv:${app}:${today}`, visitorHash);
+
+  // Track hourly unique visitor (UV)
+  await kv.sadd(`uv_hourly:${app}:${today}:${currentHour}`, visitorHash);
 }
 
 export default async function middleware(request: Request) {

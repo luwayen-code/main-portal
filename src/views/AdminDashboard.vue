@@ -27,7 +27,7 @@ ChartJS.register(
 );
 
 const router = useRouter();
-const { logout, getAuthHeaders, isAuthenticated } = useAuth();
+const { logout, getAuthHeaders } = useAuth();
 
 interface HourlyData {
   hour: number;
@@ -44,9 +44,13 @@ interface AppStats {
   icon: string;
   activeVisitors: number;
   todayPV: number;
+  todayUV: number;
   todayHourlyPV: HourlyData[];
+  todayHourlyUV: HourlyData[];
   weeklyPV: { date: string; count: number }[];
+  weeklyUV: { date: string; count: number }[];
   weeklyHourlyPV: DailyHourlyData[];
+  weeklyHourlyUV: DailyHourlyData[];
 }
 
 const stats = ref<AppStats[]>([]);
@@ -54,11 +58,6 @@ const loading = ref(true);
 const error = ref('');
 const lastUpdated = ref('');
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
-
-const APPS = [
-  { key: 'it-tools', name: 'IT Tools', icon: '🛠️' },
-  { key: 'excel-tools', name: 'EasyExcel', icon: '📊' },
-];
 
 async function fetchStats() {
   try {
@@ -99,61 +98,121 @@ function getBarHeight(count: number, maxCount: number) {
   return Math.max((count / maxCount) * 100, 2);
 }
 
-// --- Chart helpers ---
+// --- Chart colors ---
+const PV_COLOR = { line: 'rgba(79, 70, 229, 1)', fill: 'rgba(79, 70, 229, 0.08)' };
+const UV_COLOR = { line: 'rgba(16, 185, 129, 1)', fill: 'rgba(16, 185, 129, 0.08)' };
 
-const CHART_COLORS = [
-  { line: 'rgba(79, 70, 229, 1)', fill: 'rgba(79, 70, 229, 0.1)' },
-  { line: 'rgba(16, 185, 129, 1)', fill: 'rgba(16, 185, 129, 0.1)' },
-];
-
+// --- Today hourly chart (PV + UV dual lines) ---
 function getTodayHourlyChartData(app: AppStats) {
   const labels = app.todayHourlyPV.map(d => `${d.hour}:00`);
   return {
     labels,
-    datasets: [{
-      label: app.name,
-      data: app.todayHourlyPV.map(d => d.count),
-      borderColor: CHART_COLORS[stats.value.indexOf(app) % CHART_COLORS.length].line,
-      backgroundColor: CHART_COLORS[stats.value.indexOf(app) % CHART_COLORS.length].fill,
-      fill: true,
-      tension: 0.4,
-      pointRadius: 2,
-      pointHoverRadius: 5,
-      borderWidth: 2,
-    }],
+    datasets: [
+      {
+        label: 'PV',
+        data: app.todayHourlyPV.map(d => d.count),
+        borderColor: PV_COLOR.line,
+        backgroundColor: PV_COLOR.fill,
+        fill: true,
+        tension: 0.4,
+        pointRadius: 2,
+        pointHoverRadius: 5,
+        borderWidth: 2,
+      },
+      {
+        label: 'UV',
+        data: app.todayHourlyUV.map(d => d.count),
+        borderColor: UV_COLOR.line,
+        backgroundColor: UV_COLOR.fill,
+        fill: true,
+        tension: 0.4,
+        pointRadius: 2,
+        pointHoverRadius: 5,
+        borderWidth: 2,
+      },
+    ],
   };
 }
 
+// --- Weekly daily line chart (PV + UV, 7 data points each) ---
+function getWeeklyDailyChartData(app: AppStats) {
+  const labels = app.weeklyPV.map(d => formatDate(d.date));
+  return {
+    labels,
+    datasets: [
+      {
+        label: 'PV',
+        data: app.weeklyPV.map(d => d.count),
+        borderColor: PV_COLOR.line,
+        backgroundColor: PV_COLOR.fill,
+        fill: true,
+        tension: 0.3,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        borderWidth: 2,
+      },
+      {
+        label: 'UV',
+        data: app.weeklyUV.map(d => d.count),
+        borderColor: UV_COLOR.line,
+        backgroundColor: UV_COLOR.fill,
+        fill: true,
+        tension: 0.3,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        borderWidth: 2,
+      },
+    ],
+  };
+}
+
+// --- Weekly hourly chart (PV + UV dual lines, continuous timeline) ---
 function getWeeklyHourlyChartData(app: AppStats) {
-  // Flatten all hourly data across 7 days into a continuous timeline
   const allLabels: string[] = [];
-  const allData: number[] = [];
+  const pvData: number[] = [];
+  const uvData: number[] = [];
 
   for (const day of app.weeklyHourlyPV) {
     const shortDate = formatDate(day.date);
+    const uvDay = app.weeklyHourlyUV.find(d => d.date === day.date);
     for (const h of day.hours) {
       allLabels.push(h.hour === 0 ? shortDate : `${h.hour}h`);
-      allData.push(h.count);
+      pvData.push(h.count);
+      uvData.push(uvDay?.hours.find(uh => uh.hour === h.hour)?.count || 0);
     }
   }
 
   return {
     labels: allLabels,
-    datasets: [{
-      label: app.name,
-      data: allData,
-      borderColor: CHART_COLORS[stats.value.indexOf(app) % CHART_COLORS.length].line,
-      backgroundColor: CHART_COLORS[stats.value.indexOf(app) % CHART_COLORS.length].fill,
-      fill: true,
-      tension: 0.4,
-      pointRadius: 0,
-      pointHoverRadius: 4,
-      borderWidth: 2,
-    }],
+    datasets: [
+      {
+        label: 'PV',
+        data: pvData,
+        borderColor: PV_COLOR.line,
+        backgroundColor: PV_COLOR.fill,
+        fill: true,
+        tension: 0.4,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        borderWidth: 2,
+      },
+      {
+        label: 'UV',
+        data: uvData,
+        borderColor: UV_COLOR.line,
+        backgroundColor: UV_COLOR.fill,
+        fill: true,
+        tension: 0.4,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        borderWidth: 2,
+      },
+    ],
   };
 }
 
-const hourlyChartOptions = {
+// --- Chart options ---
+const dualLineChartOptions = {
   responsive: true,
   maintainAspectRatio: false,
   interaction: {
@@ -161,7 +220,19 @@ const hourlyChartOptions = {
     intersect: false,
   },
   plugins: {
-    legend: { display: false },
+    legend: {
+      display: true,
+      position: 'top' as const,
+      align: 'end' as const,
+      labels: {
+        boxWidth: 12,
+        boxHeight: 12,
+        borderRadius: 2,
+        useBorderRadius: true,
+        font: { size: 11 },
+        padding: 12,
+      },
+    },
     tooltip: {
       backgroundColor: 'rgba(0,0,0,0.75)',
       titleFont: { size: 12 },
@@ -183,6 +254,48 @@ const hourlyChartOptions = {
   },
 };
 
+const weeklyDailyChartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  interaction: {
+    mode: 'index' as const,
+    intersect: false,
+  },
+  plugins: {
+    legend: {
+      display: true,
+      position: 'top' as const,
+      align: 'end' as const,
+      labels: {
+        boxWidth: 12,
+        boxHeight: 12,
+        borderRadius: 2,
+        useBorderRadius: true,
+        font: { size: 11 },
+        padding: 12,
+      },
+    },
+    tooltip: {
+      backgroundColor: 'rgba(0,0,0,0.75)',
+      titleFont: { size: 12 },
+      bodyFont: { size: 12 },
+      padding: 10,
+      cornerRadius: 6,
+    },
+  },
+  scales: {
+    x: {
+      grid: { display: false },
+      ticks: { font: { size: 10 }, maxRotation: 0 },
+    },
+    y: {
+      beginAtZero: true,
+      grid: { color: 'rgba(0,0,0,0.05)' },
+      ticks: { font: { size: 10 }, precision: 0 },
+    },
+  },
+};
+
 const weeklyHourlyChartOptions = {
   responsive: true,
   maintainAspectRatio: false,
@@ -191,19 +304,25 @@ const weeklyHourlyChartOptions = {
     intersect: false,
   },
   plugins: {
-    legend: { display: false },
+    legend: {
+      display: true,
+      position: 'top' as const,
+      align: 'end' as const,
+      labels: {
+        boxWidth: 12,
+        boxHeight: 12,
+        borderRadius: 2,
+        useBorderRadius: true,
+        font: { size: 11 },
+        padding: 12,
+      },
+    },
     tooltip: {
       backgroundColor: 'rgba(0,0,0,0.75)',
       titleFont: { size: 12 },
       bodyFont: { size: 12 },
       padding: 10,
       cornerRadius: 6,
-      callbacks: {
-        title(items: { label: string }[]) {
-          if (!items.length) return '';
-          return items[0].label;
-        },
-      },
     },
   },
   scales: {
@@ -214,8 +333,7 @@ const weeklyHourlyChartOptions = {
         maxRotation: 0,
         autoSkip: true,
         maxTicksLimit: 7,
-        callback(this: { getLabelForValue: (idx: number) => string }, tick: { index: number }, label: string) {
-          // Only show date labels (those that look like MM-DD)
+        callback(this: { getLabelForValue: (idx: number) => string }, _tick: { index: number }, label: string) {
           if (/^\d{2}-\d{2}$/.test(label)) return label;
           return '';
         },
@@ -285,7 +403,7 @@ onUnmounted(() => {
           </div>
         </section>
 
-        <!-- Today's Page Views -->
+        <!-- Today's Page Views & Unique Visitors -->
         <section class="stats-section">
           <h2>📊 今日访问量</h2>
           <div class="pv-grid">
@@ -297,11 +415,20 @@ onUnmounted(() => {
               <div class="pv-header">
                 <span>{{ app.icon }} {{ app.name }}</span>
               </div>
-              <div class="pv-count">{{ app.todayPV }}</div>
-              <div class="pv-label">页面浏览量</div>
-              <!-- Hourly Line Chart -->
+              <div class="pv-uv-row">
+                <div class="pv-uv-item">
+                  <div class="pv-count pv-color">{{ app.todayPV }}</div>
+                  <div class="pv-label">页面浏览量 (PV)</div>
+                </div>
+                <div class="pv-uv-divider"></div>
+                <div class="pv-uv-item">
+                  <div class="pv-count uv-color">{{ app.todayUV }}</div>
+                  <div class="pv-label">独立访客 (UV)</div>
+                </div>
+              </div>
+              <!-- Hourly PV/UV Line Chart -->
               <div class="chart-container" v-if="app.todayHourlyPV && app.todayHourlyPV.length > 0">
-                <Line :data="getTodayHourlyChartData(app)" :options="hourlyChartOptions" />
+                <Line :data="getTodayHourlyChartData(app)" :options="dualLineChartOptions" />
               </div>
             </div>
           </div>
@@ -317,6 +444,7 @@ onUnmounted(() => {
               class="trend-card"
             >
               <div class="trend-header">{{ app.icon }} {{ app.name }}</div>
+
               <!-- Daily Bar Chart -->
               <div class="trend-chart">
                 <div
@@ -334,12 +462,21 @@ onUnmounted(() => {
                   <span class="chart-label">{{ formatDate(day.date) }}</span>
                 </div>
               </div>
-              <!-- Hourly Line Chart for 7 days -->
+
+              <!-- Daily PV/UV Line Chart (7 data points) -->
+              <div class="chart-sub-title">每日 PV / UV 趋势</div>
+              <div class="chart-container weekly-daily-chart" v-if="app.weeklyPV.length > 0">
+                <Line :data="getWeeklyDailyChartData(app)" :options="weeklyDailyChartOptions" />
+              </div>
+
+              <!-- Hourly PV/UV Line Chart for 7 days -->
+              <div class="chart-sub-title">逐时访问详情</div>
               <div class="chart-container weekly-chart" v-if="app.weeklyHourlyPV && app.weeklyHourlyPV.length > 0">
                 <Line :data="getWeeklyHourlyChartData(app)" :options="weeklyHourlyChartOptions" />
               </div>
+
               <div class="trend-total">
-                7日合计: {{ app.weeklyPV.reduce((sum, d) => sum + d.count, 0) }} PV
+                7日合计: {{ app.weeklyPV.reduce((sum, d) => sum + d.count, 0) }} PV / {{ app.weeklyUV.reduce((sum, d) => sum + d.count, 0) }} UV
               </div>
             </div>
           </div>
@@ -514,10 +651,10 @@ onUnmounted(() => {
   100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
 }
 
-/* Page Views */
+/* Page Views & UV */
 .pv-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
   gap: 16px;
 }
 
@@ -531,46 +668,85 @@ onUnmounted(() => {
 .pv-header {
   font-size: 0.9rem;
   color: #374151;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
+}
+
+.pv-uv-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.pv-uv-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.pv-uv-divider {
+  width: 1px;
+  height: 36px;
+  background: #e5e7eb;
 }
 
 .pv-count {
   font-size: 2rem;
   font-weight: 700;
-  color: #4f46e5;
   line-height: 1;
 }
 
+.pv-color {
+  color: #4f46e5;
+}
+
+.uv-color {
+  color: #10b981;
+}
+
 .pv-label {
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   color: #9ca3af;
   margin-top: 4px;
 }
 
 .chart-container {
   position: relative;
-  height: 180px;
+  height: 200px;
   margin-top: 16px;
   padding-top: 8px;
   border-top: 1px solid #f3f4f6;
 }
 
+.weekly-daily-chart {
+  height: 200px;
+}
+
 .weekly-chart {
-  height: 220px;
-  margin-top: 12px;
+  height: 240px;
   border-top: none;
   padding-top: 0;
+}
+
+.chart-sub-title {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  margin-top: 16px;
+  margin-bottom: 0;
+  padding-top: 12px;
+  border-top: 1px solid #f3f4f6;
 }
 
 /* Weekly Trend */
 .trend-container {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(480px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(520px, 1fr));
   gap: 16px;
 }
 
-@media (max-width: 540px) {
+@media (max-width: 580px) {
   .trend-container {
+    grid-template-columns: 1fr;
+  }
+  .pv-grid {
     grid-template-columns: 1fr;
   }
 }
