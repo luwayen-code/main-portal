@@ -48,6 +48,10 @@ function getLast7Days(): string[] {
   return days;
 }
 
+function getCurrentHour(): number {
+  return new Date().getHours();
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
@@ -95,6 +99,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           todayPV = 0;
         }
 
+        // Get today's hourly page views
+        const currentHour = getCurrentHour();
+        const todayHourlyPV = await Promise.all(
+          Array.from({ length: currentHour + 1 }, (_, h) => h).map(async (hour) => {
+            let count = 0;
+            try {
+              count = (await kv.get<number>(`pv_hourly:${app.key}:${today}:${hour}`)) || 0;
+            } catch {
+              count = 0;
+            }
+            return { hour, count };
+          }),
+        );
+
         // Get weekly page views
         const weeklyPV = await Promise.all(
           last7Days.map(async (date) => {
@@ -108,12 +126,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }),
         );
 
+        // Get weekly hourly page views (each day with hourly breakdown)
+        const weeklyHourlyPV = await Promise.all(
+          last7Days.map(async (date) => {
+            const maxHour = date === today ? currentHour : 23;
+            const hours = await Promise.all(
+              Array.from({ length: maxHour + 1 }, (_, h) => h).map(async (hour) => {
+                let count = 0;
+                try {
+                  count = (await kv.get<number>(`pv_hourly:${app.key}:${date}:${hour}`)) || 0;
+                } catch {
+                  count = 0;
+                }
+                return { hour, count };
+              }),
+            );
+            return { date, hours };
+          }),
+        );
+
         return {
           name: app.name,
           icon: app.icon,
           activeVisitors,
           todayPV,
+          todayHourlyPV,
           weeklyPV,
+          weeklyHourlyPV,
         };
       }),
     );

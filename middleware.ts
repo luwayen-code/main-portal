@@ -49,6 +49,7 @@ function isPageVisit(pathname: string, accept: string | null): boolean {
 async function trackVisit(app: string, visitorHash: string): Promise<void> {
   const now = Date.now();
   const today = new Date().toISOString().slice(0, 10);
+  const currentHour = new Date().getHours();
 
   // Record active visitor in sorted set (score = timestamp)
   await kv.zadd(`active_visitors:${app}`, {
@@ -58,6 +59,9 @@ async function trackVisit(app: string, visitorHash: string): Promise<void> {
 
   // Increment daily page view counter
   await kv.incr(`pv:${app}:${today}`);
+
+  // Increment hourly page view counter
+  await kv.incr(`pv_hourly:${app}:${today}:${currentHour}`);
 }
 
 export default async function middleware(request: Request) {

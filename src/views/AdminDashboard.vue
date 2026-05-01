@@ -2,16 +2,51 @@
 import { ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuth } from '../composables/useAuth';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler,
+} from 'chart.js';
+import { Line } from 'vue-chartjs';
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler,
+);
 
 const router = useRouter();
 const { logout, getAuthHeaders, isAuthenticated } = useAuth();
+
+interface HourlyData {
+  hour: number;
+  count: number;
+}
+
+interface DailyHourlyData {
+  date: string;
+  hours: HourlyData[];
+}
 
 interface AppStats {
   name: string;
   icon: string;
   activeVisitors: number;
   todayPV: number;
+  todayHourlyPV: HourlyData[];
   weeklyPV: { date: string; count: number }[];
+  weeklyHourlyPV: DailyHourlyData[];
 }
 
 const stats = ref<AppStats[]>([]);
@@ -63,6 +98,136 @@ function getBarHeight(count: number, maxCount: number) {
   if (maxCount === 0) return 0;
   return Math.max((count / maxCount) * 100, 2);
 }
+
+// --- Chart helpers ---
+
+const CHART_COLORS = [
+  { line: 'rgba(79, 70, 229, 1)', fill: 'rgba(79, 70, 229, 0.1)' },
+  { line: 'rgba(16, 185, 129, 1)', fill: 'rgba(16, 185, 129, 0.1)' },
+];
+
+function getTodayHourlyChartData(app: AppStats) {
+  const labels = app.todayHourlyPV.map(d => `${d.hour}:00`);
+  return {
+    labels,
+    datasets: [{
+      label: app.name,
+      data: app.todayHourlyPV.map(d => d.count),
+      borderColor: CHART_COLORS[stats.value.indexOf(app) % CHART_COLORS.length].line,
+      backgroundColor: CHART_COLORS[stats.value.indexOf(app) % CHART_COLORS.length].fill,
+      fill: true,
+      tension: 0.4,
+      pointRadius: 2,
+      pointHoverRadius: 5,
+      borderWidth: 2,
+    }],
+  };
+}
+
+function getWeeklyHourlyChartData(app: AppStats) {
+  // Flatten all hourly data across 7 days into a continuous timeline
+  const allLabels: string[] = [];
+  const allData: number[] = [];
+
+  for (const day of app.weeklyHourlyPV) {
+    const shortDate = formatDate(day.date);
+    for (const h of day.hours) {
+      allLabels.push(h.hour === 0 ? shortDate : `${h.hour}h`);
+      allData.push(h.count);
+    }
+  }
+
+  return {
+    labels: allLabels,
+    datasets: [{
+      label: app.name,
+      data: allData,
+      borderColor: CHART_COLORS[stats.value.indexOf(app) % CHART_COLORS.length].line,
+      backgroundColor: CHART_COLORS[stats.value.indexOf(app) % CHART_COLORS.length].fill,
+      fill: true,
+      tension: 0.4,
+      pointRadius: 0,
+      pointHoverRadius: 4,
+      borderWidth: 2,
+    }],
+  };
+}
+
+const hourlyChartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  interaction: {
+    mode: 'index' as const,
+    intersect: false,
+  },
+  plugins: {
+    legend: { display: false },
+    tooltip: {
+      backgroundColor: 'rgba(0,0,0,0.75)',
+      titleFont: { size: 12 },
+      bodyFont: { size: 12 },
+      padding: 10,
+      cornerRadius: 6,
+    },
+  },
+  scales: {
+    x: {
+      grid: { display: false },
+      ticks: { font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 13 },
+    },
+    y: {
+      beginAtZero: true,
+      grid: { color: 'rgba(0,0,0,0.05)' },
+      ticks: { font: { size: 10 }, precision: 0 },
+    },
+  },
+};
+
+const weeklyHourlyChartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  interaction: {
+    mode: 'index' as const,
+    intersect: false,
+  },
+  plugins: {
+    legend: { display: false },
+    tooltip: {
+      backgroundColor: 'rgba(0,0,0,0.75)',
+      titleFont: { size: 12 },
+      bodyFont: { size: 12 },
+      padding: 10,
+      cornerRadius: 6,
+      callbacks: {
+        title(items: { label: string }[]) {
+          if (!items.length) return '';
+          return items[0].label;
+        },
+      },
+    },
+  },
+  scales: {
+    x: {
+      grid: { display: false },
+      ticks: {
+        font: { size: 10 },
+        maxRotation: 0,
+        autoSkip: true,
+        maxTicksLimit: 7,
+        callback(this: { getLabelForValue: (idx: number) => string }, tick: { index: number }, label: string) {
+          // Only show date labels (those that look like MM-DD)
+          if (/^\d{2}-\d{2}$/.test(label)) return label;
+          return '';
+        },
+      },
+    },
+    y: {
+      beginAtZero: true,
+      grid: { color: 'rgba(0,0,0,0.05)' },
+      ticks: { font: { size: 10 }, precision: 0 },
+    },
+  },
+};
 
 onMounted(() => {
   fetchStats();
@@ -134,6 +299,10 @@ onUnmounted(() => {
               </div>
               <div class="pv-count">{{ app.todayPV }}</div>
               <div class="pv-label">页面浏览量</div>
+              <!-- Hourly Line Chart -->
+              <div class="chart-container" v-if="app.todayHourlyPV && app.todayHourlyPV.length > 0">
+                <Line :data="getTodayHourlyChartData(app)" :options="hourlyChartOptions" />
+              </div>
             </div>
           </div>
         </section>
@@ -148,6 +317,7 @@ onUnmounted(() => {
               class="trend-card"
             >
               <div class="trend-header">{{ app.icon }} {{ app.name }}</div>
+              <!-- Daily Bar Chart -->
               <div class="trend-chart">
                 <div
                   v-for="(day, idx) in app.weeklyPV"
@@ -164,6 +334,10 @@ onUnmounted(() => {
                   <span class="chart-label">{{ formatDate(day.date) }}</span>
                 </div>
               </div>
+              <!-- Hourly Line Chart for 7 days -->
+              <div class="chart-container weekly-chart" v-if="app.weeklyHourlyPV && app.weeklyHourlyPV.length > 0">
+                <Line :data="getWeeklyHourlyChartData(app)" :options="weeklyHourlyChartOptions" />
+              </div>
               <div class="trend-total">
                 7日合计: {{ app.weeklyPV.reduce((sum, d) => sum + d.count, 0) }} PV
               </div>
@@ -174,7 +348,7 @@ onUnmounted(() => {
     </main>
 
     <footer class="admin-footer">
-      <p>数据每30秒自动刷新 · Powered by Vercel KV</p>
+      <p>数据每30秒自动刷新 · Powered by XingWhy</p>
     </footer>
   </div>
 </template>
@@ -371,6 +545,21 @@ onUnmounted(() => {
   font-size: 0.8rem;
   color: #9ca3af;
   margin-top: 4px;
+}
+
+.chart-container {
+  position: relative;
+  height: 180px;
+  margin-top: 16px;
+  padding-top: 8px;
+  border-top: 1px solid #f3f4f6;
+}
+
+.weekly-chart {
+  height: 220px;
+  margin-top: 12px;
+  border-top: none;
+  padding-top: 0;
 }
 
 /* Weekly Trend */
