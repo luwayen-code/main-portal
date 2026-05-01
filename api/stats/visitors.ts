@@ -221,7 +221,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }),
     );
 
-    return res.status(200).json({ apps });
+    let paused = false;
+    try {
+      paused = (await kv.get<boolean>('stats:paused')) || false;
+    } catch {
+      paused = false;
+    }
+
+    return res.status(200).json({ apps, paused });
   } catch (err) {
     console.error('Failed to fetch stats:', err);
     return res.status(500).json({ error: '获取统计数据失败' });

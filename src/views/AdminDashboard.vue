@@ -57,6 +57,10 @@ const stats = ref<AppStats[]>([]);
 const loading = ref(true);
 const error = ref('');
 const lastUpdated = ref('');
+const paused = ref(false);
+const showClearConfirm = ref(false);
+const clearing = ref(false);
+const exporting = ref(false);
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
 async function fetchStats() {
@@ -72,6 +76,7 @@ async function fetchStats() {
     const data = await res.json();
     if (res.ok) {
       stats.value = data.apps || [];
+      paused.value = data.paused || false;
       error.value = '';
     } else {
       error.value = data.error || '获取数据失败';
@@ -87,6 +92,76 @@ async function fetchStats() {
 function handleLogout() {
   logout();
   router.push('/admin/login');
+}
+
+async function togglePause() {
+  const newState = !paused.value;
+  try {
+    const res = await fetch('/api/stats/control', {
+      method: 'POST',
+      headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paused: newState }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      paused.value = data.paused;
+    } else {
+      error.value = data.error || '操作失败';
+    }
+  } catch {
+    error.value = '网络错误，请稍后重试';
+  }
+}
+
+async function clearStats() {
+  clearing.value = true;
+  try {
+    const res = await fetch('/api/stats/clear', {
+      method: 'POST',
+      headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirm: true }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      showClearConfirm.value = false;
+      await fetchStats();
+    } else {
+      error.value = data.error || '清除失败';
+    }
+  } catch {
+    error.value = '网络错误，请稍后重试';
+  } finally {
+    clearing.value = false;
+  }
+}
+
+async function exportStats() {
+  exporting.value = true;
+  try {
+    const res = await fetch('/api/stats/export', {
+      headers: getAuthHeaders(),
+    });
+    if (res.ok) {
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const disposition = res.headers.get('content-disposition');
+      const match = disposition?.match(/filename="([^"]+)"/);
+      a.download = match ? match[1] : 'stats-export.json';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } else {
+      const data = await res.json().catch(() => ({}));
+      error.value = data.error || '导出失败';
+    }
+  } catch {
+    error.value = '网络错误，请稍后重试';
+  } finally {
+    exporting.value = false;
+  }
 }
 
 function formatDate(dateStr: string) {
@@ -364,8 +439,18 @@ onUnmounted(() => {
       <div class="header-left">
         <h1>📋 管理后台</h1>
         <span class="update-hint" v-if="lastUpdated">上次更新: {{ lastUpdated }}</span>
+        <span class="paused-badge" v-if="paused">⏸️ 统计已暂停</span>
       </div>
       <div class="header-right">
+        <button class="pause-btn" @click="togglePause" :disabled="clearing || exporting">
+          {{ paused ? '▶️ 恢复统计' : '⏸️ 暂停统计' }}
+        </button>
+        <button class="export-btn" @click="exportStats" :disabled="exporting || clearing">
+          {{ exporting ? '导出中...' : '📥 导出数据' }}
+        </button>
+        <button class="clear-btn" @click="showClearConfirm = true" :disabled="clearing || exporting">
+          🗑️ 清除数据
+        </button>
         <button class="refresh-btn" @click="fetchStats" :disabled="loading">🔄 刷新</button>
         <router-link to="/" class="back-link">← 首页</router-link>
         <button class="logout-btn" @click="handleLogout">退出登录</button>
@@ -487,6 +572,20 @@ onUnmounted(() => {
     <footer class="admin-footer">
       <p>数据每30秒自动刷新 · Powered by XingWhy</p>
     </footer>
+
+    <!-- Clear Confirm Modal -->
+    <div v-if="showClearConfirm" class="modal-overlay" @click.self="showClearConfirm = false">
+      <div class="modal-box">
+        <h3>⚠️ 确认清除所有统计数据？</h3>
+        <p>此操作将永久删除所有 PV、UV 及活跃访客数据，无法撤销。</p>
+        <div class="modal-actions">
+          <button class="modal-cancel" @click="showClearConfirm = false">取消</button>
+          <button class="modal-confirm" @click="clearStats" :disabled="clearing">
+            {{ clearing ? '清除中...' : '确认清除' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -848,5 +947,132 @@ onUnmounted(() => {
   font-size: 0.75rem;
   border-top: 1px solid #e5e7eb;
   background: #fff;
+}
+
+.paused-badge {
+  font-size: 0.75rem;
+  color: #d97706;
+  background: #fef3c7;
+  padding: 2px 10px;
+  border-radius: 100px;
+  margin-left: 10px;
+  font-weight: 500;
+}
+
+.pause-btn,
+.export-btn,
+.clear-btn {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.pause-btn {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.pause-btn:hover:not(:disabled) {
+  background: #fde68a;
+}
+
+.export-btn {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.export-btn:hover:not(:disabled) {
+  background: #bfdbfe;
+}
+
+.clear-btn {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.clear-btn:hover:not(:disabled) {
+  background: #fecaca;
+}
+
+.pause-btn:disabled,
+.export-btn:disabled,
+.clear-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-box {
+  background: #fff;
+  border-radius: 12px;
+  padding: 28px 32px;
+  max-width: 420px;
+  width: 90%;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+}
+
+.modal-box h3 {
+  margin: 0 0 10px;
+  font-size: 1.1rem;
+  color: #1a1a2e;
+}
+
+.modal-box p {
+  margin: 0 0 24px;
+  font-size: 0.9rem;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.modal-cancel,
+.modal-confirm {
+  padding: 8px 18px;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.modal-cancel {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.modal-cancel:hover {
+  background: #e5e7eb;
+}
+
+.modal-confirm {
+  background: #dc2626;
+  color: #fff;
+}
+
+.modal-confirm:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+.modal-confirm:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 </style>

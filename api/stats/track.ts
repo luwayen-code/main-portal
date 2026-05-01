@@ -17,6 +17,8 @@ const VALID_APPS = new Set(['it-tools', 'excel-tools']);
 // Simple shared token for client-side tracking beacons
 const TRACK_TOKEN = process.env.TRACK_TOKEN || 'xingwhy-track-2026';
 
+const PAUSED_KEY = 'stats:paused';
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
@@ -33,6 +35,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (!app || !VALID_APPS.has(app)) {
     return res.status(400).json({ error: '无效的应用标识' });
+  }
+
+  // Check if tracking is paused
+  try {
+    const paused = await kv.get<boolean>(PAUSED_KEY);
+    if (paused) {
+      return res.status(200).json({ ok: true, paused: true });
+    }
+  } catch {
+    // ignore
   }
 
   try {
