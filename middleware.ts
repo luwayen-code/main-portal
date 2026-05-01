@@ -1,19 +1,3 @@
-import { kv } from '@vercel/kv';
-
-// Active visitor TTL: 5 minutes
-const ACTIVE_VISITOR_TTL = 5 * 60 * 1000;
-
-// Beijing timezone offset (UTC+8)
-const BEIJING_OFFSET_MS = 8 * 60 * 60 * 1000;
-
-function getBeijingDateStr(): string {
-  return new Date(Date.now() + BEIJING_OFFSET_MS).toISOString().slice(0, 10);
-}
-
-function getBeijingHour(): number {
-  return new Date(Date.now() + BEIJING_OFFSET_MS).getUTCHours();
-}
-
 // Sub-app prefixes to track
 const TRACKED_PREFIXES = ['/it-tools', '/excel-tools'];
 
@@ -66,33 +50,11 @@ function isPageVisit(pathname: string, accept: string | null): boolean {
   return false;
 }
 
-async function trackVisit(app: string, visitorHash: string): Promise<void> {
-  const now = Date.now();
-  const today = getBeijingDateStr();
-  const currentHour = getBeijingHour();
-
-  // Record active visitor in sorted set (score = timestamp)
-  await kv.zadd(`active_visitors:${app}`, {
-    score: now,
-    member: visitorHash,
-  });
-
-  // Increment daily page view counter
-  await kv.incr(`pv:${app}:${today}`);
-
-  // Increment hourly page view counter
-  await kv.incr(`pv_hourly:${app}:${today}:${currentHour}`);
-
-  // Track daily unique visitor (UV)
-  await kv.sadd(`uv:${app}:${today}`, visitorHash);
-
-  // Track hourly unique visitor (UV)
-  await kv.sadd(`uv_hourly:${app}:${today}:${currentHour}`, visitorHash);
-}
-
-// Client-side tracking script injected into sub-app HTML
-// Only tracks SPA navigation (pushState/replaceState/popstate)
-// Initial page load is tracked server-side by this middleware
+// Client-side tracking script injected into sub-app HTML.
+// Handles BOTH initial page load AND SPA navigation.
+// Rationale: PWA Service Workers in sub-apps may serve cached HTML
+// without hitting the server, so server-side tracking is unreliable.
+// The client-side beacon runs on every page load, regardless of cache.
 function getTrackingScript(appKey: string): string {
   return `<script data-track="1">(function(){`
     + `var APP='${appKey}';`
@@ -102,8 +64,11 @@ function getTrackingScript(appKey: string): string {
     + `method:'POST',`
     + `headers:{'Content-Type':'application/json','x-track-token':TK},`
     + `body:JSON.stringify({app:APP}),`
-    + `keepalive:true`
+    + `keepalive:true,`
+    + `cache:'no-store'`
     + `}).catch(function(){})}catch(e){}}`
+    // Track on every page load (even when served from SW cache)
+    + `beacon();`
     // Intercept SPA navigation (pushState / replaceState)
     + `var ps=history.pushState,rs=history.replaceState;`
     + `history.pushState=function(){ps.apply(this,arguments);beacon()};`
@@ -111,14 +76,6 @@ function getTrackingScript(appKey: string): string {
     // Listen for popstate (back/forward navigation)
     + `window.addEventListener('popstate',beacon);`
     + `})()</script>`;
-}
-
-async function hashString(input: string): Promise<string> {
-  const data = new TextEncoder().encode(input);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(hashBuffer))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
 }
 
 export default async function middleware(request: Request) {
@@ -136,22 +93,10 @@ export default async function middleware(request: Request) {
   const acceptHeader = request.headers.get('accept');
   const isHtml = isPageVisit(pathname, acceptHeader);
 
-  // --- Server-side tracking for all page visits ---
-  if (isHtml) {
-    const ip = request.headers.get('x-forwarded-for')
-      || request.headers.get('x-real-ip')
-      || 'unknown';
-    const ua = request.headers.get('user-agent') || 'unknown';
-    const visitorHash = await hashString(`${ip}:${ua}`);
-
-    try {
-      await trackVisit(app, visitorHash);
-    } catch (err) {
-      console.error('Tracking error:', err);
-    }
-  }
-
   // --- For HTML pages: fetch external URL + inject tracking script ---
+  // All tracking is done client-side via the injected script.
+  // Server-side tracking is intentionally NOT used here because
+  // PWA Service Workers may serve cached HTML without any server request.
   if (isHtml && EXTERNAL_URLS[app]) {
     try {
       const externalUrl = `${EXTERNAL_URLS[app]}${pathname}`;
