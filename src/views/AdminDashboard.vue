@@ -424,6 +424,7 @@ const weeklyHourlyChartOptions = {
 
 onMounted(() => {
   fetchStats();
+  fetchFeedbacks();
   // Auto-refresh every 30 seconds
   refreshTimer = setInterval(fetchStats, 30_000);
 });
@@ -431,6 +432,64 @@ onMounted(() => {
 onUnmounted(() => {
   if (refreshTimer) clearInterval(refreshTimer);
 });
+
+// --- Feedback management ---
+const activeTab = ref<'stats' | 'feedback'>('stats');
+const feedbacks = ref<any[]>([]);
+const fbLoading = ref(false);
+const fbError = ref('');
+const replyingId = ref<string | null>(null);
+const replyContent = ref('');
+
+async function fetchFeedbacks() {
+  fbLoading.value = true;
+  fbError.value = '';
+  try {
+    const res = await fetch('/api/feedback/list', {
+      headers: getAuthHeaders(),
+    });
+    if (res.status === 401) {
+      logout();
+      router.push('/admin/login');
+      return;
+    }
+    const data = await res.json();
+    if (res.ok) {
+      feedbacks.value = data.feedbacks || [];
+    } else {
+      fbError.value = data.error || '获取反馈失败';
+    }
+  } catch {
+    fbError.value = '网络错误';
+  } finally {
+    fbLoading.value = false;
+  }
+}
+
+async function submitReply(id: string) {
+  if (!replyContent.value.trim()) return;
+  try {
+    const res = await fetch('/api/feedback/reply', {
+      method: 'POST',
+      headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, reply: replyContent.value.trim() }),
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      replyingId.value = null;
+      replyContent.value = '';
+      await fetchFeedbacks();
+    } else {
+      fbError.value = data.error || '回复失败';
+    }
+  } catch {
+    fbError.value = '网络错误';
+  }
+}
+
+function formatFeedbackTime(iso: string): string {
+  return new Date(iso).toLocaleString('zh-CN');
+}
 </script>
 
 <template>
@@ -458,17 +517,29 @@ onUnmounted(() => {
     </header>
 
     <main class="admin-content">
-      <div v-if="loading && stats.length === 0" class="loading-state">
-        <div class="spinner"></div>
-        <p>加载统计数据中...</p>
+      <!-- Tab Switcher -->
+      <div class="tab-bar">
+        <button :class="{ active: activeTab === 'stats' }" @click="activeTab = 'stats'">
+          📊 访问统计
+        </button>
+        <button :class="{ active: activeTab === 'feedback' }" @click="activeTab = 'feedback'">
+          💬 用户反馈 <span v-if="feedbacks.length" class="fb-badge">{{ feedbacks.length }}</span>
+        </button>
       </div>
 
-      <div v-else-if="error && stats.length === 0" class="error-state">
-        <p>❌ {{ error }}</p>
-        <button @click="fetchStats">重试</button>
-      </div>
+      <!-- Stats Tab -->
+      <template v-if="activeTab === 'stats'">
+        <div v-if="loading && stats.length === 0" class="loading-state">
+          <div class="spinner"></div>
+          <p>加载统计数据中...</p>
+        </div>
 
-      <template v-else>
+        <div v-else-if="error && stats.length === 0" class="error-state">
+          <p>❌ {{ error }}</p>
+          <button @click="fetchStats">重试</button>
+        </div>
+
+        <template v-else>
         <!-- Active Visitors Overview -->
         <section class="stats-section">
           <h2>👤 实时访客</h2>
@@ -566,6 +637,74 @@ onUnmounted(() => {
             </div>
           </div>
         </section>
+      </template>
+      </template>
+
+      <!-- Feedback Tab -->
+      <template v-if="activeTab === 'feedback'">
+        <div class="feedback-toolbar">
+          <button class="refresh-btn" @click="fetchFeedbacks" :disabled="fbLoading">
+            {{ fbLoading ? '刷新中...' : '🔄 刷新' }}
+          </button>
+        </div>
+
+        <div v-if="fbLoading && feedbacks.length === 0" class="loading-state">
+          <div class="spinner"></div>
+          <p>加载反馈数据中...</p>
+        </div>
+
+        <div v-else-if="fbError && feedbacks.length === 0" class="error-state">
+          <p>❌ {{ fbError }}</p>
+          <button @click="fetchFeedbacks">重试</button>
+        </div>
+
+        <div v-else-if="feedbacks.length === 0" class="empty-state">
+          <p>暂无用户反馈</p>
+        </div>
+
+        <div v-else class="feedback-list-admin">
+          <div
+            v-for="item in feedbacks"
+            :key="item.id"
+            class="feedback-card"
+            :class="{ replied: item.status === 'replied' }"
+          >
+            <div class="feedback-card-header">
+              <div class="feedback-card-meta">
+                <span class="fb-type">{{ { bug: '🐛', feature: '✨', suggestion: '💡', other: '📝' }[item.type] || '📝' }}</span>
+                <span class="fb-app">{{ item.app || 'excel-tools' }}</span>
+                <span class="fb-contact">{{ item.contact }}</span>
+                <span class="fb-time">{{ formatFeedbackTime(item.createdAt) }}</span>
+              </div>
+              <span class="fb-status" :class="item.status">{{ item.status === 'replied' ? '已回复' : '待处理' }}</span>
+            </div>
+
+            <div class="fb-content">{{ item.content }}</div>
+
+            <div v-if="item.reply" class="fb-reply-box">
+              <div class="fb-reply-label">管理员回复：</div>
+              <div class="fb-reply-text">{{ item.reply.content }}</div>
+              <div class="fb-reply-time">{{ formatFeedbackTime(item.reply.repliedAt) }}</div>
+            </div>
+
+            <div v-else class="fb-reply-actions">
+              <button
+                v-if="replyingId !== item.id"
+                class="reply-toggle-btn"
+                @click="replyingId = item.id; replyContent = ''"
+              >
+                ✏️ 回复
+              </button>
+              <div v-else class="reply-form">
+                <textarea v-model="replyContent" rows="3" placeholder="请输入回复内容..."></textarea>
+                <div class="reply-form-actions">
+                  <button class="modal-cancel" @click="replyingId = null">取消</button>
+                  <button class="modal-confirm" @click="submitReply(item.id)">提交回复</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </template>
     </main>
 
@@ -1071,8 +1210,245 @@ onUnmounted(() => {
   background: #b91c1c;
 }
 
-.modal-confirm:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+/* Tab Bar */
+.tab-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  background: #fff;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+}
+
+.tab-bar button {
+  flex: 1;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #6b7280;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.tab-bar button.active {
+  background: #1a1a2e;
+  color: #fff;
+}
+
+.tab-bar button:not(.active):hover {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.fb-badge {
+  background: #ef4444;
+  color: white;
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+/* Feedback Admin */
+.feedback-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 24px;
+  color: #9ca3af;
+  font-size: 0.95rem;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+}
+
+.feedback-list-admin {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.feedback-card {
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  padding: 20px;
+  transition: box-shadow 0.2s;
+}
+
+.feedback-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+}
+
+.feedback-card.replied {
+  border-left: 4px solid #10b981;
+}
+
+.feedback-card:not(.replied) {
+  border-left: 4px solid #f59e0b;
+}
+
+.feedback-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.feedback-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.fb-type {
+  font-size: 1rem;
+}
+
+.fb-app {
+  font-size: 0.8rem;
+  color: #6b7280;
+  background: #f3f4f6;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.fb-contact {
+  font-size: 0.8rem;
+  color: #4f46e5;
+  font-weight: 500;
+}
+
+.fb-time {
+  font-size: 0.75rem;
+  color: #9ca3af;
+}
+
+.fb-status {
+  font-size: 0.75rem;
+  padding: 3px 10px;
+  border-radius: 100px;
+  font-weight: 600;
+}
+
+.fb-status.open {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.fb-status.replied {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.fb-content {
+  font-size: 0.9rem;
+  color: #374151;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  margin-bottom: 14px;
+}
+
+.fb-reply-box {
+  background: #f0fdf4;
+  border-radius: 8px;
+  padding: 14px;
+  border: 1px solid #bbf7d0;
+}
+
+.fb-reply-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #065f46;
+  margin-bottom: 6px;
+}
+
+.fb-reply-text {
+  font-size: 0.9rem;
+  color: #374151;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.fb-reply-time {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  margin-top: 6px;
+}
+
+.fb-reply-actions {
+  margin-top: 4px;
+}
+
+.reply-toggle-btn {
+  padding: 6px 14px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.reply-toggle-btn:hover {
+  background: #dbeafe;
+}
+
+.reply-form {
+  margin-top: 8px;
+}
+
+.reply-form textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.reply-form textarea:focus {
+  outline: none;
+  border-color: #4f46e5;
+}
+
+.reply-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.reply-form-actions .modal-cancel,
+.reply-form-actions .modal-confirm {
+  padding: 7px 16px;
+}
+
+.reply-form-actions .modal-confirm {
+  background: #4f46e5;
+}
+
+.reply-form-actions .modal-confirm:hover:not(:disabled) {
+  background: #4338ca;
 }
 </style>
