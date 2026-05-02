@@ -35,13 +35,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const feedbacks = await Promise.all(
       ids.map(async (id) => {
-        const data = await kv.get<string>(`feedback:${id}`);
-        return data ? JSON.parse(data) : null;
+        const data = await kv.get(`feedback:${id}`);
+        return data || null;
       })
     );
 
     const valid = feedbacks
-      .filter(Boolean)
+      .filter((f): f is Record<string, any> => Boolean(f))
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     return res.status(200).json({ feedbacks: valid });

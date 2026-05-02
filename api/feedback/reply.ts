@@ -40,19 +40,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: '参数不完整' });
     }
 
-    const data = await kv.get<string>(`feedback:${id}`);
-    if (!data) {
+    const feedback: any = await kv.get(`feedback:${id}`);
+    if (!feedback) {
       return res.status(404).json({ error: '反馈不存在' });
     }
 
-    const feedback = JSON.parse(data);
     feedback.status = 'replied';
     feedback.reply = {
       content: reply.trim(),
       repliedAt: new Date().toISOString(),
     };
 
-    await kv.set(`feedback:${id}`, JSON.stringify(feedback));
+    await kv.set(`feedback:${id}`, feedback);
     return res.status(200).json({ success: true });
   } catch (err) {
     console.error('Feedback reply error:', err);

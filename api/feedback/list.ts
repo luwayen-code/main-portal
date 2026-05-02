@@ -41,8 +41,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const [nextCursor, keys] = await kv.scan(cursor, { match: 'feedback:fb_*', count: 100 });
       cursor = Number(nextCursor);
       for (const key of keys) {
-        const data = await kv.get<string>(key);
-        if (data) feedbacks.push(JSON.parse(data));
+        const data = await kv.get(key);
+        if (data) feedbacks.push(data);
       }
     } while (cursor !== 0);
 

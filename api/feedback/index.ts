@@ -42,7 +42,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       createdAt: new Date().toISOString(),
     };
 
-    await kv.set(`feedback:${id}`, JSON.stringify(feedback));
+    await kv.set(`feedback:${id}`, feedback);
 
     if (token) {
       const tokenKey = `feedback:token:${token}`;
