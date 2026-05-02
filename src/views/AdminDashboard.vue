@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuth } from '../composables/useAuth';
 import {
@@ -490,6 +490,9 @@ async function submitReply(id: string) {
 function formatFeedbackTime(iso: string): string {
   return new Date(iso).toLocaleString('zh-CN');
 }
+
+// 待处理反馈数量（用于 badge 显示）
+const openFeedbackCount = computed(() => feedbacks.value.filter((f: any) => f.status === 'open').length)
 </script>
 
 <template>
@@ -523,7 +526,7 @@ function formatFeedbackTime(iso: string): string {
           📊 访问统计
         </button>
         <button :class="{ active: activeTab === 'feedback' }" @click="activeTab = 'feedback'">
-          💬 用户反馈 <span v-if="feedbacks.length" class="fb-badge">{{ feedbacks.length }}</span>
+          💬 用户反馈 <span v-if="openFeedbackCount" class="fb-badge">{{ openFeedbackCount }}</span>
         </button>
       </div>
 
