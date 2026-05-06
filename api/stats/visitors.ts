@@ -90,11 +90,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       APPS.map(async (app) => {
         // Get active visitor count from sorted set
         let activeVisitors = 0;
+        let lastActiveTime = 0;
         try {
           await redis.zremrangebyscore(`active_visitors:${app.key}`, 0, minScore);
           activeVisitors = await redis.zcount(`active_visitors:${app.key}`, minScore, now);
+          // Get the latest active visitor timestamp
+          const latestEntries = await redis.zrange(
+            `active_visitors:${app.key}`,
+            0,
+            0,
+            { rev: true, withScores: true },
+          ) as { member: string; score: number }[];
+          if (latestEntries.length > 0) {
+            lastActiveTime = latestEntries[0].score;
+          }
         } catch {
           activeVisitors = 0;
+          lastActiveTime = 0;
         }
 
         // Helper: parse hash fields into hourly arrays
@@ -160,6 +172,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           name: app.name,
           icon: app.icon,
           activeVisitors,
+          lastActiveTime,
           todayPV: todayParsed.pvTotal,
           todayUV: todayParsed.uvTotal,
           todayHourlyPV: todayParsed.pvHourly,

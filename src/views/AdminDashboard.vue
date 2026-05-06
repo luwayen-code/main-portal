@@ -43,6 +43,7 @@ interface AppStats {
   name: string;
   icon: string;
   activeVisitors: number;
+  lastActiveTime: number;
   todayPV: number;
   todayUV: number;
   todayHourlyPV: HourlyData[];
@@ -162,6 +163,16 @@ async function exportStats() {
   } finally {
     exporting.value = false;
   }
+}
+
+function formatActiveTime(ts: number): string {
+  if (!ts) return '';
+  const now = Date.now();
+  const diff = now - ts;
+  if (diff < 10_000) return '刚刚';
+  if (diff < 60_000) return `${Math.floor(diff / 1000)}秒前`;
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}分钟前`;
+  return new Date(ts).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
 }
 
 function formatDate(dateStr: string) {
@@ -556,6 +567,9 @@ const openFeedbackCount = computed(() => feedbacks.value.filter((f: any) => f.st
               <div class="active-info">
                 <span class="active-count">{{ app.activeVisitors }}</span>
                 <span class="active-label">{{ app.name }} 在线访客</span>
+                <span class="active-time" v-if="app.lastActiveTime">
+                  最新活动 {{ formatActiveTime(app.lastActiveTime) }}
+                </span>
               </div>
               <div class="pulse-dot" v-if="app.activeVisitors > 0"></div>
             </div>
@@ -873,6 +887,12 @@ const openFeedbackCount = computed(() => feedbacks.value.filter((f: any) => f.st
   font-size: 0.8rem;
   color: #6b7280;
   margin-top: 4px;
+}
+
+.active-time {
+  font-size: 0.72rem;
+  color: #9ca3af;
+  margin-top: 2px;
 }
 
 .pulse-dot {
