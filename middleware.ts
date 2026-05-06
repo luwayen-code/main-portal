@@ -51,7 +51,12 @@ function isPageVisit(pathname: string, accept: string | null): boolean {
 }
 
 // Client-side tracking script injected into sub-app HTML.
-// Handles BOTH initial page load AND SPA navigation.
+// Handles: page loads, SPA navigation, user activity heartbeats,
+// and visibility change (tab switch / background).
+//
+// Activity heartbeats are throttled to 4 minutes and only update
+// the online status (no PV/UV counting) to keep KV usage minimal.
+//
 // Rationale: PWA Service Workers in sub-apps may serve cached HTML
 // without hitting the server, so server-side tracking is unreliable.
 // The client-side beacon runs on every page load, regardless of cache.
@@ -59,22 +64,39 @@ function getTrackingScript(appKey: string): string {
   return `<script data-track="1">(function(){`
     + `var APP='${appKey}';`
     + `var TK='${TRACK_TOKEN}';`
-    + `function beacon(){`
+    + `function sendBeacon(isActivity){`
+    + `var body=isActivity?{app:APP,activity:true}:{app:APP};`
     + `try{fetch('/api/stats/track',{`
     + `method:'POST',`
     + `headers:{'Content-Type':'application/json','x-track-token':TK},`
-    + `body:JSON.stringify({app:APP}),`
+    + `body:JSON.stringify(body),`
     + `keepalive:true,`
     + `cache:'no-store'`
     + `}).catch(function(){})}catch(e){}}`
+    + `function fullBeacon(){sendBeacon(false)}`
     // Track on every page load (even when served from SW cache)
-    + `beacon();`
+    + `fullBeacon();`
+    // --- Activity heartbeat: throttle to 4 minutes, only updates online status ---
+    + `var lastActivity=0,ACTIVITY_GAP=4*60*1000;`
+    + `function activityBeacon(){`
+    + `var now=Date.now();`
+    + `if(now-lastActivity<ACTIVITY_GAP)return;`
+    + `lastActivity=now;`
+    + `sendBeacon(true);`
+    + `}`
+    + `['click','scroll','keydown','mousemove','touchstart'].forEach(function(e){`
+    + `document.addEventListener(e,activityBeacon,{passive:true,capture:true});`
+    + `});`
+    // --- Visibility change: refresh online status when user switches back ---
+    + `document.addEventListener('visibilitychange',function(){`
+    + `if(document.visibilityState==='visible')sendBeacon(true);`
+    + `});`
     // Intercept SPA navigation (pushState / replaceState)
     + `var ps=history.pushState,rs=history.replaceState;`
-    + `history.pushState=function(){ps.apply(this,arguments);beacon()};`
-    + `history.replaceState=function(){rs.apply(this,arguments);beacon()};`
+    + `history.pushState=function(){ps.apply(this,arguments);fullBeacon()};`
+    + `history.replaceState=function(){rs.apply(this,arguments);fullBeacon()};`
     // Listen for popstate (back/forward navigation)
-    + `window.addEventListener('popstate',beacon);`
+    + `window.addEventListener('popstate',fullBeacon);`
     + `})()</script>`;
 }
 

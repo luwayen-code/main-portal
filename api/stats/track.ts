@@ -33,7 +33,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(403).json({ error: '无效的追踪令牌' });
   }
 
-  const { app } = req.body || {};
+  const { app, activity } = req.body || {};
+  const isActivityHeartbeat = activity === true;
 
   if (!app || !VALID_APPS.has(app)) {
     return res.status(400).json({ error: '无效的应用标识' });
@@ -51,8 +52,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const now = Date.now();
-    const today = getBeijingDateStr();
-    const currentHour = getBeijingHour();
 
     // Generate visitor hash from IP + User-Agent
     const ip = req.headers['x-forwarded-for']
@@ -66,11 +65,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const crypto = await import('crypto');
     const visitorHash = crypto.createHash('sha256').update(visitorId).digest('hex');
 
-    // Record active visitor
+    // Record active visitor (always, even for activity heartbeats)
     await redis.zadd(`active_visitors:${app}`, {
       score: now,
       member: visitorHash,
     });
+
+    // --- Activity heartbeat: only update online status, skip PV/UV ---
+    if (isActivityHeartbeat) {
+      return res.status(200).json({ ok: true, heartbeat: true });
+    }
+
+    // --- Full tracking: record PV/UV counts ---
+    const today = getBeijingDateStr();
+    const currentHour = getBeijingHour();
 
     // --- Aggregated daily stats (Hash) — dramatically reduces reads ---
     const statsKey = `dailystats:${app}:${today}`;
