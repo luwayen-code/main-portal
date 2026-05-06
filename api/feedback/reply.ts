@@ -1,6 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { kv } from '@vercel/kv';
+import { Redis } from '@upstash/redis';
 import { createHmac } from 'crypto';
+
+const redis = new Redis({
+  url: process.env.KV_REST_API_URL!,
+  token: process.env.KV_REST_API_TOKEN!,
+});
 
 const TOKEN_SECRET = process.env.TOKEN_SECRET || 'change-this-secret-in-production';
 
@@ -40,7 +45,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: '参数不完整' });
     }
 
-    const feedback: any = await kv.get(`feedback:${id}`);
+    const feedback: any = await redis.get(`feedback:${id}`);
     if (!feedback) {
       return res.status(404).json({ error: '反馈不存在' });
     }
@@ -51,7 +56,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       repliedAt: new Date().toISOString(),
     };
 
-    await kv.set(`feedback:${id}`, feedback);
+    await redis.set(`feedback:${id}`, feedback);
     return res.status(200).json({ success: true });
   } catch (err) {
     console.error('Feedback reply error:', err);

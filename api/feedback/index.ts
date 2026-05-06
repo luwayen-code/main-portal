@@ -1,5 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { kv } from '@vercel/kv';
+import { Redis } from '@upstash/redis';
+
+const redis = new Redis({
+  url: process.env.KV_REST_API_URL!,
+  token: process.env.KV_REST_API_TOKEN!,
+});
 
 interface FeedbackBody {
   type: string;
@@ -42,19 +47,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       createdAt: new Date().toISOString(),
     };
 
-    await kv.set(`feedback:${id}`, feedback);
+    await redis.set(`feedback:${id}`, feedback);
 
     if (token) {
       const tokenKey = `feedback:token:${token}`;
-      const existing = await kv.get<string[]>(tokenKey) || [];
+      const existing = await redis.get<string[]>(tokenKey) || [];
       existing.push(id);
-      await kv.set(tokenKey, existing);
+      await redis.set(tokenKey, existing);
     }
 
     const contactKey = `feedback:contact:${contact.trim().toLowerCase()}`;
-    const existingContact = await kv.get<string[]>(contactKey) || [];
+    const existingContact = await redis.get<string[]>(contactKey) || [];
     existingContact.push(id);
-    await kv.set(contactKey, existingContact);
+    await redis.set(contactKey, existingContact);
 
     return res.status(200).json({ success: true, id });
   } catch (err: any) {

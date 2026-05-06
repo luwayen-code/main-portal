@@ -1,5 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { kv } from '@vercel/kv';
+import { Redis } from '@upstash/redis';
+
+const redis = new Redis({
+  url: process.env.KV_REST_API_URL!,
+  token: process.env.KV_REST_API_TOKEN!,
+});
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS headers
@@ -22,12 +27,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let ids: string[] = [];
 
     if (token) {
-      const tokenIds = await kv.get<string[]>(`feedback:token:${token}`) || [];
+      const tokenIds = await redis.get<string[]>(`feedback:token:${token}`) || [];
       ids.push(...tokenIds);
     }
 
     if (contact) {
-      const contactIds = await kv.get<string[]>(`feedback:contact:${contact.toLowerCase()}`) || [];
+      const contactIds = await redis.get<string[]>(`feedback:contact:${contact.toLowerCase()}`) || [];
       ids.push(...contactIds);
     }
 
@@ -35,7 +40,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const feedbacks = await Promise.all(
       ids.map(async (id) => {
-        const data = await kv.get(`feedback:${id}`);
+        const data = await redis.get(`feedback:${id}`);
         return data || null;
       })
     );

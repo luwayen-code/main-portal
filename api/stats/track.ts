@@ -1,5 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { kv } from '@vercel/kv';
+import { Redis } from '@upstash/redis';
+
+const redis = new Redis({
+  url: process.env.KV_REST_API_URL!,
+  token: process.env.KV_REST_API_TOKEN!,
+});
 
 // Beijing timezone offset (UTC+8)
 const BEIJING_OFFSET_MS = 8 * 60 * 60 * 1000;
@@ -39,7 +44,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Check if tracking is paused
   try {
-    const paused = await kv.get<boolean>(PAUSED_KEY);
+    const paused = await redis.get<boolean>(PAUSED_KEY);
     if (paused) {
       return res.status(200).json({ ok: true, paused: true });
     }
@@ -65,22 +70,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const visitorHash = crypto.createHash('sha256').update(visitorId).digest('hex');
 
     // Record active visitor
-    await kv.zadd(`active_visitors:${app}`, {
+    await redis.zadd(`active_visitors:${app}`, {
       score: now,
       member: visitorHash,
     });
 
     // Increment daily PV
-    await kv.incr(`pv:${app}:${today}`);
+    await redis.incr(`pv:${app}:${today}`);
 
     // Increment hourly PV
-    await kv.incr(`pv_hourly:${app}:${today}:${currentHour}`);
+    await redis.incr(`pv_hourly:${app}:${today}:${currentHour}`);
 
     // Track daily UV
-    await kv.sadd(`uv:${app}:${today}`, visitorHash);
+    await redis.sadd(`uv:${app}:${today}`, visitorHash);
 
     // Track hourly UV
-    await kv.sadd(`uv_hourly:${app}:${today}:${currentHour}`, visitorHash);
+    await redis.sadd(`uv_hourly:${app}:${today}:${currentHour}`, visitorHash);
 
     return res.status(200).json({ ok: true });
   } catch (err) {

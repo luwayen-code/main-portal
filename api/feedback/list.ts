@@ -1,6 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { kv } from '@vercel/kv';
+import { Redis } from '@upstash/redis';
 import { createHmac } from 'crypto';
+
+const redis = new Redis({
+  url: process.env.KV_REST_API_URL!,
+  token: process.env.KV_REST_API_TOKEN!,
+});
 
 const TOKEN_SECRET = process.env.TOKEN_SECRET || 'change-this-secret-in-production';
 
@@ -38,10 +43,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let cursor = 0;
     const feedbacks: any[] = [];
     do {
-      const [nextCursor, keys] = await kv.scan(cursor, { match: 'feedback:fb_*', count: 100 });
+      const [nextCursor, keys] = await redis.scan(cursor, { match: 'feedback:fb_*', count: 100 });
       cursor = Number(nextCursor);
       for (const key of keys) {
-        const data = await kv.get(key);
+        const data = await redis.get(key);
         if (data) feedbacks.push(data);
       }
     } while (cursor !== 0);

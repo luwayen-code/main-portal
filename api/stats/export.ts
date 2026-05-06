@@ -1,6 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { kv } from '@vercel/kv';
+import { Redis } from '@upstash/redis';
 import { createHmac } from 'crypto';
+
+const redis = new Redis({
+  url: process.env.KV_REST_API_URL!,
+  token: process.env.KV_REST_API_TOKEN!,
+});
 
 const TOKEN_SECRET = process.env.TOKEN_SECRET || 'change-this-secret-in-production';
 const BEIJING_OFFSET_MS = 8 * 60 * 60 * 1000;
@@ -83,34 +88,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const apps = await Promise.all(
       APPS.map(async (app) => {
-        const todayPV = (await kv.get<number>(`pv:${app.key}:${today}`)) || 0;
-        const todayUV = (await kv.scard(`uv:${app.key}:${today}`)) || 0;
+        const todayPV = (await redis.get<number>(`pv:${app.key}:${today}`)) || 0;
+        const todayUV = (await redis.scard(`uv:${app.key}:${today}`)) || 0;
 
         const todayHourlyPV = await Promise.all(
           Array.from({ length: currentHour + 1 }, (_, h) => h).map(async (hour) => ({
             hour,
-            count: (await kv.get<number>(`pv_hourly:${app.key}:${today}:${hour}`)) || 0,
+            count: (await redis.get<number>(`pv_hourly:${app.key}:${today}:${hour}`)) || 0,
           })),
         );
 
         const todayHourlyUV = await Promise.all(
           Array.from({ length: currentHour + 1 }, (_, h) => h).map(async (hour) => ({
             hour,
-            count: (await kv.scard(`uv_hourly:${app.key}:${today}:${hour}`)) || 0,
+            count: (await redis.scard(`uv_hourly:${app.key}:${today}:${hour}`)) || 0,
           })),
         );
 
         const weeklyPV = await Promise.all(
           last7Days.map(async (date) => ({
             date,
-            count: (await kv.get<number>(`pv:${app.key}:${date}`)) || 0,
+            count: (await redis.get<number>(`pv:${app.key}:${date}`)) || 0,
           })),
         );
 
         const weeklyUV = await Promise.all(
           last7Days.map(async (date) => ({
             date,
-            count: (await kv.scard(`uv:${app.key}:${date}`)) || 0,
+            count: (await redis.scard(`uv:${app.key}:${date}`)) || 0,
           })),
         );
 
@@ -120,7 +125,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const hours = await Promise.all(
               Array.from({ length: maxHour + 1 }, (_, h) => h).map(async (hour) => ({
                 hour,
-                count: (await kv.get<number>(`pv_hourly:${app.key}:${date}:${hour}`)) || 0,
+                count: (await redis.get<number>(`pv_hourly:${app.key}:${date}:${hour}`)) || 0,
               })),
             );
             return { date, hours };
@@ -133,7 +138,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const hours = await Promise.all(
               Array.from({ length: maxHour + 1 }, (_, h) => h).map(async (hour) => ({
                 hour,
-                count: (await kv.scard(`uv_hourly:${app.key}:${date}:${hour}`)) || 0,
+                count: (await redis.scard(`uv_hourly:${app.key}:${date}:${hour}`)) || 0,
               })),
             );
             return { date, hours };

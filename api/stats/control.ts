@@ -1,6 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { kv } from '@vercel/kv';
+import { Redis } from '@upstash/redis';
 import { createHmac } from 'crypto';
+
+const redis = new Redis({
+  url: process.env.KV_REST_API_URL!,
+  token: process.env.KV_REST_API_TOKEN!,
+});
 
 const TOKEN_SECRET = process.env.TOKEN_SECRET || 'change-this-secret-in-production';
 const PAUSED_KEY = 'stats:paused';
@@ -44,7 +49,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!requireAuth(req, res)) return;
 
     try {
-      const paused = await kv.get<boolean>(PAUSED_KEY) || false;
+      const paused = await redis.get<boolean>(PAUSED_KEY) || false;
       return res.status(200).json({ paused });
     } catch (err) {
       console.error('Failed to get control state:', err);
@@ -62,9 +67,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     try {
       if (paused) {
-        await kv.set(PAUSED_KEY, true);
+        await redis.set(PAUSED_KEY, true);
       } else {
-        await kv.del(PAUSED_KEY);
+        await redis.del(PAUSED_KEY);
       }
       return res.status(200).json({ paused });
     } catch (err) {
