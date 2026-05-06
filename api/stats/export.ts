@@ -83,72 +83,69 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const currentHour = getBeijingHour();
     const last7Days = getLast7Days();
 
+    function parseDayFields(fields: Record<string, string> | null, _date: string, maxHour: number) {
+      const pvHourly: { hour: number; count: number }[] = [];
+      const uvHourly: { hour: number; count: number }[] = [];
+      let pvTotal = 0;
+      let uvTotal = 0;
+      if (fields) {
+        pvTotal = parseInt(fields.pv || '0', 10) || 0;
+        uvTotal = parseInt(fields.uv || '0', 10) || 0;
+        for (let h = 0; h <= maxHour; h++) {
+          pvHourly.push({ hour: h, count: parseInt(fields[`h${h}_pv`] || '0', 10) || 0 });
+          uvHourly.push({ hour: h, count: parseInt(fields[`h${h}_uv`] || '0', 10) || 0 });
+        }
+      } else {
+        for (let h = 0; h <= maxHour; h++) {
+          pvHourly.push({ hour: h, count: 0 });
+          uvHourly.push({ hour: h, count: 0 });
+        }
+      }
+      return { pvTotal, uvTotal, pvHourly, uvHourly };
+    }
+
     const apps = await Promise.all(
       APPS.map(async (app) => {
-        const todayPV = (await redis.get<number>(`pv:${app.key}:${today}`)) || 0;
-        const todayUV = (await redis.scard(`uv:${app.key}:${today}`)) || 0;
-
-        const todayHourlyPV = await Promise.all(
-          Array.from({ length: currentHour + 1 }, (_, h) => h).map(async (hour) => ({
-            hour,
-            count: (await redis.get<number>(`pv_hourly:${app.key}:${today}:${hour}`)) || 0,
-          })),
-        );
-
-        const todayHourlyUV = await Promise.all(
-          Array.from({ length: currentHour + 1 }, (_, h) => h).map(async (hour) => ({
-            hour,
-            count: (await redis.scard(`uv_hourly:${app.key}:${today}:${hour}`)) || 0,
-          })),
-        );
-
-        const weeklyPV = await Promise.all(
-          last7Days.map(async (date) => ({
-            date,
-            count: (await redis.get<number>(`pv:${app.key}:${date}`)) || 0,
-          })),
-        );
-
-        const weeklyUV = await Promise.all(
-          last7Days.map(async (date) => ({
-            date,
-            count: (await redis.scard(`uv:${app.key}:${date}`)) || 0,
-          })),
-        );
-
-        const weeklyHourlyPV = await Promise.all(
-          last7Days.map(async (date) => {
-            const maxHour = date === today ? currentHour : 23;
-            const hours = await Promise.all(
-              Array.from({ length: maxHour + 1 }, (_, h) => h).map(async (hour) => ({
-                hour,
-                count: (await redis.get<number>(`pv_hourly:${app.key}:${date}:${hour}`)) || 0,
-              })),
-            );
-            return { date, hours };
+        // Fetch all 7 days via HGETALL (1 KV op per day)
+        const allDays = [today, ...last7Days.filter(d => d !== today)];
+        const uniqueDays = [...new Set(allDays)];
+        const dailyStats = await Promise.all(
+          uniqueDays.map(async (date) => {
+            try {
+              const fields = await redis.hgetall(`dailystats:${app.key}:${date}`);
+              return { date, fields: fields as Record<string, string> | null };
+            } catch {
+              return { date, fields: null };
+            }
           }),
         );
+        const statsMap = new Map(dailyStats.map(d => [d.date, d.fields]));
 
-        const weeklyHourlyUV = await Promise.all(
-          last7Days.map(async (date) => {
-            const maxHour = date === today ? currentHour : 23;
-            const hours = await Promise.all(
-              Array.from({ length: maxHour + 1 }, (_, h) => h).map(async (hour) => ({
-                hour,
-                count: (await redis.scard(`uv_hourly:${app.key}:${date}:${hour}`)) || 0,
-              })),
-            );
-            return { date, hours };
-          }),
-        );
+        // Today
+        const todayParsed = parseDayFields(statsMap.get(today) || null, today, currentHour);
+
+        // Weekly
+        const weeklyPV: { date: string; count: number }[] = [];
+        const weeklyUV: { date: string; count: number }[] = [];
+        const weeklyHourlyPV: { date: string; hours: { hour: number; count: number }[] }[] = [];
+        const weeklyHourlyUV: { date: string; hours: { hour: number; count: number }[] }[] = [];
+        for (const date of last7Days) {
+          const dayFields = statsMap.get(date) || null;
+          const maxHour = date === today ? currentHour : 23;
+          const parsed = parseDayFields(dayFields, date, maxHour);
+          weeklyPV.push({ date, count: parsed.pvTotal });
+          weeklyUV.push({ date, count: parsed.uvTotal });
+          weeklyHourlyPV.push({ date, hours: parsed.pvHourly });
+          weeklyHourlyUV.push({ date, hours: parsed.uvHourly });
+        }
 
         return {
           name: app.name,
           icon: app.icon,
-          todayPV,
-          todayUV,
-          todayHourlyPV,
-          todayHourlyUV,
+          todayPV: todayParsed.pvTotal,
+          todayUV: todayParsed.uvTotal,
+          todayHourlyPV: todayParsed.pvHourly,
+          todayHourlyUV: todayParsed.uvHourly,
           weeklyPV,
           weeklyUV,
           weeklyHourlyPV,

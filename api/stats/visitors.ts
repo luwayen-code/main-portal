@@ -84,6 +84,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const minScore = now - ACTIVE_VISITOR_TTL;
     const today = getTodayStr();
     const last7Days = getLast7Days();
+    const currentHour = getBeijingHour();
 
     const apps = await Promise.all(
       APPS.map(async (app) => {
@@ -91,130 +92,78 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         let activeVisitors = 0;
         try {
           await redis.zremrangebyscore(`active_visitors:${app.key}`, 0, minScore);
-          activeVisitors = await redis.zcount(
-            `active_visitors:${app.key}`,
-            minScore,
-            now,
-          );
+          activeVisitors = await redis.zcount(`active_visitors:${app.key}`, minScore, now);
         } catch {
           activeVisitors = 0;
         }
 
-        // Get today's page views
-        let todayPV = 0;
-        try {
-          todayPV = (await redis.get<number>(`pv:${app.key}:${today}`)) || 0;
-        } catch {
-          todayPV = 0;
+        // Helper: parse hash fields into hourly arrays
+        function parseDayStats(fields: Record<string, string> | null, date: string, maxHour: number) {
+          const pvHourly: { hour: number; count: number }[] = [];
+          const uvHourly: { hour: number; count: number }[] = [];
+          let pvTotal = 0;
+          let uvTotal = 0;
+          if (fields) {
+            pvTotal = parseInt(fields.pv || '0', 10) || 0;
+            uvTotal = parseInt(fields.uv || '0', 10) || 0;
+            for (let h = 0; h <= maxHour; h++) {
+              pvHourly.push({ hour: h, count: parseInt(fields[`h${h}_pv`] || '0', 10) || 0 });
+              uvHourly.push({ hour: h, count: parseInt(fields[`h${h}_uv`] || '0', 10) || 0 });
+            }
+          } else {
+            for (let h = 0; h <= maxHour; h++) {
+              pvHourly.push({ hour: h, count: 0 });
+              uvHourly.push({ hour: h, count: 0 });
+            }
+          }
+          return { pvTotal, uvTotal, pvHourly, uvHourly };
         }
 
-        // Get today's unique visitors
-        let todayUV = 0;
-        try {
-          todayUV = (await redis.scard(`uv:${app.key}:${today}`)) || 0;
-        } catch {
-          todayUV = 0;
+        // Fetch all 7 days of stats via HGETALL (1 KV op per day, instead of ~48 per day)
+        const allDays = [today, ...last7Days.filter(d => d !== today)];
+        const uniqueDays = [...new Set(allDays)];
+        const dailyStats = await Promise.all(
+          uniqueDays.map(async (date) => {
+            try {
+              const fields = await redis.hgetall(`dailystats:${app.key}:${date}`);
+              return { date, fields: fields as Record<string, string> | null };
+            } catch {
+              return { date, fields: null };
+            }
+          }),
+        );
+
+        // Build a lookup map
+        const statsMap = new Map(dailyStats.map(d => [d.date, d.fields]));
+
+        // Today's stats
+        const todayFields = statsMap.get(today) || null;
+        const todayParsed = parseDayStats(todayFields, today, currentHour);
+
+        // Weekly daily totals
+        const weeklyPV: { date: string; count: number }[] = [];
+        const weeklyUV: { date: string; count: number }[] = [];
+        const weeklyHourlyPV: { date: string; hours: { hour: number; count: number }[] }[] = [];
+        const weeklyHourlyUV: { date: string; hours: { hour: number; count: number }[] }[] = [];
+
+        for (const date of last7Days) {
+          const dayFields = statsMap.get(date) || null;
+          const maxHour = date === today ? currentHour : 23;
+          const parsed = parseDayStats(dayFields, date, maxHour);
+          weeklyPV.push({ date, count: parsed.pvTotal });
+          weeklyUV.push({ date, count: parsed.uvTotal });
+          weeklyHourlyPV.push({ date, hours: parsed.pvHourly });
+          weeklyHourlyUV.push({ date, hours: parsed.uvHourly });
         }
-
-        // Get today's hourly page views
-        const currentHour = getBeijingHour();
-        const todayHourlyPV = await Promise.all(
-          Array.from({ length: currentHour + 1 }, (_, h) => h).map(async (hour) => {
-            let count = 0;
-            try {
-              count = (await redis.get<number>(`pv_hourly:${app.key}:${today}:${hour}`)) || 0;
-            } catch {
-              count = 0;
-            }
-            return { hour, count };
-          }),
-        );
-
-        // Get today's hourly unique visitors
-        const todayHourlyUV = await Promise.all(
-          Array.from({ length: currentHour + 1 }, (_, h) => h).map(async (hour) => {
-            let count = 0;
-            try {
-              count = (await redis.scard(`uv_hourly:${app.key}:${today}:${hour}`)) || 0;
-            } catch {
-              count = 0;
-            }
-            return { hour, count };
-          }),
-        );
-
-        // Get weekly page views
-        const weeklyPV = await Promise.all(
-          last7Days.map(async (date) => {
-            let count = 0;
-            try {
-              count = (await redis.get<number>(`pv:${app.key}:${date}`)) || 0;
-            } catch {
-              count = 0;
-            }
-            return { date, count };
-          }),
-        );
-
-        // Get weekly unique visitors
-        const weeklyUV = await Promise.all(
-          last7Days.map(async (date) => {
-            let count = 0;
-            try {
-              count = (await redis.scard(`uv:${app.key}:${date}`)) || 0;
-            } catch {
-              count = 0;
-            }
-            return { date, count };
-          }),
-        );
-
-        // Get weekly hourly page views (each day with hourly breakdown)
-        const weeklyHourlyPV = await Promise.all(
-          last7Days.map(async (date) => {
-            const maxHour = date === today ? currentHour : 23;
-            const hours = await Promise.all(
-              Array.from({ length: maxHour + 1 }, (_, h) => h).map(async (hour) => {
-                let count = 0;
-                try {
-                  count = (await redis.get<number>(`pv_hourly:${app.key}:${date}:${hour}`)) || 0;
-                } catch {
-                  count = 0;
-                }
-                return { hour, count };
-              }),
-            );
-            return { date, hours };
-          }),
-        );
-
-        // Get weekly hourly unique visitors (each day with hourly breakdown)
-        const weeklyHourlyUV = await Promise.all(
-          last7Days.map(async (date) => {
-            const maxHour = date === today ? currentHour : 23;
-            const hours = await Promise.all(
-              Array.from({ length: maxHour + 1 }, (_, h) => h).map(async (hour) => {
-                let count = 0;
-                try {
-                  count = (await redis.scard(`uv_hourly:${app.key}:${date}:${hour}`)) || 0;
-                } catch {
-                  count = 0;
-                }
-                return { hour, count };
-              }),
-            );
-            return { date, hours };
-          }),
-        );
 
         return {
           name: app.name,
           icon: app.icon,
           activeVisitors,
-          todayPV,
-          todayUV,
-          todayHourlyPV,
-          todayHourlyUV,
+          todayPV: todayParsed.pvTotal,
+          todayUV: todayParsed.uvTotal,
+          todayHourlyPV: todayParsed.pvHourly,
+          todayHourlyUV: todayParsed.uvHourly,
           weeklyPV,
           weeklyUV,
           weeklyHourlyPV,
@@ -231,8 +180,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     return res.status(200).json({ apps, paused });
-  } catch (err) {
-    console.error('Failed to fetch stats:', err);
-    return res.status(500).json({ error: '获取统计数据失败' });
+  } catch (err: any) {
+    console.error('Failed to fetch stats:', err?.message || String(err));
+    return res.status(500).json({ error: '获取统计数据失败', detail: err?.message || String(err) });
   }
 }

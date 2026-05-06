@@ -72,17 +72,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       member: visitorHash,
     });
 
-    // Increment daily PV
+    // --- Aggregated daily stats (Hash) — dramatically reduces reads ---
+    const statsKey = `dailystats:${app}:${today}`;
+    // Daily PV
+    await redis.hincrby(statsKey, 'pv', 1);
+    // Hourly PV
+    await redis.hincrby(statsKey, `h${currentHour}_pv`, 1);
+
+    // Hourly UV (only increment if visitor is new to this hour)
+    const hourlyUVKey = `uv_hourly:${app}:${today}:${currentHour}`;
+    const isNewHourlyUV = await redis.sadd(hourlyUVKey, visitorHash);
+    if (isNewHourlyUV > 0) {
+      await redis.hincrby(statsKey, `h${currentHour}_uv`, 1);
+    }
+
+    // Daily UV (only increment if visitor is new today)
+    const dailyUVKey = `uv:${app}:${today}`;
+    const isNewDailyUV = await redis.sadd(dailyUVKey, visitorHash);
+    if (isNewDailyUV > 0) {
+      await redis.hincrby(statsKey, 'uv', 1);
+    }
+
+    // --- Legacy keys (keep for backward compatibility) ---
     await redis.incr(`pv:${app}:${today}`);
-
-    // Increment hourly PV
     await redis.incr(`pv_hourly:${app}:${today}:${currentHour}`);
-
-    // Track daily UV
-    await redis.sadd(`uv:${app}:${today}`, visitorHash);
-
-    // Track hourly UV
-    await redis.sadd(`uv_hourly:${app}:${today}:${currentHour}`, visitorHash);
 
     return res.status(200).json({ ok: true });
   } catch (err) {

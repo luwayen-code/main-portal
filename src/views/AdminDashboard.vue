@@ -425,8 +425,8 @@ const weeklyHourlyChartOptions = {
 onMounted(() => {
   fetchStats();
   fetchFeedbacks();
-  // Auto-refresh every 30 seconds
-  refreshTimer = setInterval(fetchStats, 30_000);
+  // Auto-refresh every 2 minutes (reduced from 30s to avoid hitting Upstash free tier rate limit)
+  refreshTimer = setInterval(fetchStats, 120_000);
 });
 
 onUnmounted(() => {
@@ -712,7 +712,7 @@ const openFeedbackCount = computed(() => feedbacks.value.filter((f: any) => f.st
     </main>
 
     <footer class="admin-footer">
-      <p>数据每30秒自动刷新 · Powered by XingWhy</p>
+      <p>数据每2分钟自动刷新 · Powered by XingWhy</p>
     </footer>
 
     <!-- Clear Confirm Modal -->
