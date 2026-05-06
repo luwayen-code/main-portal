@@ -95,14 +95,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           await redis.zremrangebyscore(`active_visitors:${app.key}`, 0, minScore);
           activeVisitors = await redis.zcount(`active_visitors:${app.key}`, minScore, now);
           // Get the latest active visitor timestamp
-          const latestEntries = await redis.zrange(
+          // ZRANGE with WITHSCORES returns flat array: [member1, score1, member2, score2, ...]
+          const latestFlat = await redis.zrange(
             `active_visitors:${app.key}`,
             0,
             0,
             { rev: true, withScores: true },
-          ) as { member: string; score: number }[];
-          if (latestEntries.length > 0) {
-            lastActiveTime = latestEntries[0].score;
+          ) as string[];
+          if (latestFlat.length >= 2) {
+            lastActiveTime = parseInt(latestFlat[1], 10) || 0;
           }
         } catch {
           activeVisitors = 0;
