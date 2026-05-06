@@ -2,10 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { Redis } from '@upstash/redis';
 import { createHmac } from 'crypto';
 
-const redis = new Redis({
-  url: process.env.KV_REST_API_URL!,
-  token: process.env.KV_REST_API_TOKEN!,
-});
+const redis = Redis.fromEnv();
 
 const TOKEN_SECRET = process.env.TOKEN_SECRET || 'change-this-secret-in-production';
 
@@ -53,8 +50,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     feedbacks.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     return res.status(200).json({ feedbacks });
-  } catch (err) {
-    console.error('Admin feedback list error:', err);
-    return res.status(500).json({ error: '获取失败' });
+  } catch (err: any) {
+    console.error('Admin feedback list error:', err?.message || String(err));
+    return res.status(500).json({ error: '获取失败', detail: err?.message || String(err) });
   }
 }
