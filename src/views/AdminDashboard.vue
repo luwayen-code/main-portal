@@ -899,7 +899,7 @@ const openFeedbackCount = computed(() => feedbacks.value.filter((f: any) => f.st
 /* Active Visitors */
 .active-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 16px;
 }
 
@@ -969,7 +969,7 @@ const openFeedbackCount = computed(() => feedbacks.value.filter((f: any) => f.st
 /* Page Views & UV */
 .pv-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
   gap: 16px;
 }
 
@@ -1089,7 +1089,7 @@ const openFeedbackCount = computed(() => feedbacks.value.filter((f: any) => f.st
 /* New Visitors */
 .new-visitor-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
   gap: 16px;
 }
 
@@ -1178,7 +1178,7 @@ const openFeedbackCount = computed(() => feedbacks.value.filter((f: any) => f.st
 /* Weekly Trend */
 .trend-container {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(520px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(520px, 1fr));
   gap: 16px;
 }
 
