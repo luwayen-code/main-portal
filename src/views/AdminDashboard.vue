@@ -422,7 +422,8 @@ const weeklyHourlyChartOptions = {
         maxRotation: 0,
         autoSkip: true,
         maxTicksLimit: 28,
-        callback(this: { getLabelForValue: (idx: number) => string }, _tick: { index: number }, label: string) {
+        callback(this: any, value: unknown) {
+          const label = String(value);
           // 显示日期标签
           if (/^\d{2}-\d{2}$/.test(label)) return label;
           // 显示每4小时的时间标签（4:00, 8:00, 12:00, 16:00, 20:00）
