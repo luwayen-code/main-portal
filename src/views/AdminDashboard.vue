@@ -265,7 +265,13 @@ function getWeeklyHourlyChartData(app: AppStats) {
     const shortDate = formatDate(day.date);
     const uvDay = app.weeklyHourlyUV.find(d => d.date === day.date);
     for (const h of day.hours) {
-      allLabels.push(h.hour === 0 ? shortDate : `${h.hour}:00`);
+      if (h.hour === 0) {
+        allLabels.push(shortDate);
+      } else if (h.hour % 4 === 0) {
+        allLabels.push(`${h.hour}:00`);
+      } else {
+        allLabels.push('');
+      }
       pvData.push(h.count);
       uvData.push(uvDay?.hours.find(uh => uh.hour === h.hour)?.count || 0);
     }
@@ -422,18 +428,6 @@ const weeklyHourlyChartOptions = {
         maxRotation: 0,
         autoSkip: true,
         maxTicksLimit: 28,
-        callback(this: any, value: unknown) {
-          const label = String(value);
-          // 显示日期标签
-          if (/^\d{2}-\d{2}$/.test(label)) return label;
-          // 显示每4小时的时间标签（4:00, 8:00, 12:00, 16:00, 20:00）
-          const match = label.match(/^(\d+):00$/);
-          if (match) {
-            const hour = parseInt(match[1], 10);
-            if (hour % 4 === 0) return label;
-          }
-          return '';
-        },
       },
     },
     y: {
