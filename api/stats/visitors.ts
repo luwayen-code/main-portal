@@ -116,9 +116,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const uvHourly: { hour: number; count: number }[] = [];
           let pvTotal = 0;
           let uvTotal = 0;
+          let newVisitors = 0;
           if (fields) {
             pvTotal = parseInt(fields.pv || '0', 10) || 0;
             uvTotal = parseInt(fields.uv || '0', 10) || 0;
+            newVisitors = parseInt(fields.new_visitors || '0', 10) || 0;
             for (let h = 0; h <= maxHour; h++) {
               pvHourly.push({ hour: h, count: parseInt(fields[`h${h}_pv`] || '0', 10) || 0 });
               uvHourly.push({ hour: h, count: parseInt(fields[`h${h}_uv`] || '0', 10) || 0 });
@@ -129,7 +131,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               uvHourly.push({ hour: h, count: 0 });
             }
           }
-          return { pvTotal, uvTotal, pvHourly, uvHourly };
+          return { pvTotal, uvTotal, pvHourly, uvHourly, newVisitors };
         }
 
         // Fetch all 7 days of stats via HGETALL (1 KV op per day, instead of ~48 per day)
@@ -158,6 +160,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const weeklyUV: { date: string; count: number }[] = [];
         const weeklyHourlyPV: { date: string; hours: { hour: number; count: number }[] }[] = [];
         const weeklyHourlyUV: { date: string; hours: { hour: number; count: number }[] }[] = [];
+        let weeklyNewVisitors = 0;
 
         for (const date of last7Days) {
           const dayFields = statsMap.get(date) || null;
@@ -167,6 +170,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           weeklyUV.push({ date, count: parsed.uvTotal });
           weeklyHourlyPV.push({ date, hours: parsed.pvHourly });
           weeklyHourlyUV.push({ date, hours: parsed.uvHourly });
+          weeklyNewVisitors += parsed.newVisitors;
+        }
+
+        // Total new visitors (cumulative, all time)
+        let totalNewVisitors = 0;
+        try {
+          totalNewVisitors = (await redis.get<number>(`stats:new_visitors:${app.key}`)) || 0;
+        } catch {
+          totalNewVisitors = 0;
         }
 
         return {
@@ -176,12 +188,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           lastActiveTime,
           todayPV: todayParsed.pvTotal,
           todayUV: todayParsed.uvTotal,
+          todayNewVisitors: todayParsed.newVisitors,
           todayHourlyPV: todayParsed.pvHourly,
           todayHourlyUV: todayParsed.uvHourly,
           weeklyPV,
           weeklyUV,
+          weeklyNewVisitors,
           weeklyHourlyPV,
           weeklyHourlyUV,
+          totalNewVisitors,
         };
       }),
     );

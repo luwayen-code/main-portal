@@ -101,6 +101,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await redis.hincrby(statsKey, 'uv', 1);
     }
 
+    // New visitor tracking (first time ever globally)
+    const allVisitorsKey = `all_visitors:${app}`;
+    const isNewGlobalVisitor = await redis.sadd(allVisitorsKey, visitorHash);
+    if (isNewGlobalVisitor > 0) {
+      await redis.hincrby(statsKey, 'new_visitors', 1);
+      await redis.incr(`stats:new_visitors:${app}`);
+    }
+
     // --- Legacy keys (keep for backward compatibility) ---
     await redis.incr(`pv:${app}:${today}`);
     await redis.incr(`pv_hourly:${app}:${today}:${currentHour}`);

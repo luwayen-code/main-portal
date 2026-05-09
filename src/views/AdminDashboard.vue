@@ -46,12 +46,15 @@ interface AppStats {
   lastActiveTime: number;
   todayPV: number;
   todayUV: number;
+  todayNewVisitors: number;
   todayHourlyPV: HourlyData[];
   todayHourlyUV: HourlyData[];
   weeklyPV: { date: string; count: number }[];
   weeklyUV: { date: string; count: number }[];
+  weeklyNewVisitors: number;
   weeklyHourlyPV: DailyHourlyData[];
   weeklyHourlyUV: DailyHourlyData[];
+  totalNewVisitors: number;
 }
 
 const stats = ref<AppStats[]>([]);
@@ -599,9 +602,66 @@ const openFeedbackCount = computed(() => feedbacks.value.filter((f: any) => f.st
                   <div class="pv-label">独立访客 (UV)</div>
                 </div>
               </div>
+              <!-- Visitor Composition (New vs Returning) -->
+              <div class="visitor-composition" v-if="app.todayUV > 0">
+                <div class="vc-bar">
+                  <div
+                    class="vc-bar-new"
+                    :style="{ width: (app.todayNewVisitors / app.todayUV * 100) + '%' }"
+                    :title="'新访客 ' + app.todayNewVisitors + ' 人'"
+                  ></div>
+                  <div
+                    class="vc-bar-returning"
+                    :style="{ width: ((app.todayUV - app.todayNewVisitors) / app.todayUV * 100) + '%' }"
+                    :title="'老访客 ' + (app.todayUV - app.todayNewVisitors) + ' 人'"
+                  ></div>
+                </div>
+                <div class="vc-labels">
+                  <span class="vc-label-new">
+                    🆕 新访客 <strong>{{ app.todayNewVisitors }}</strong>
+                    <span class="vc-pct">({{ app.todayUV > 0 ? Math.round(app.todayNewVisitors / app.todayUV * 100) : 0 }}%)</span>
+                  </span>
+                  <span class="vc-label-returning">
+                    🔄 老访客 <strong>{{ app.todayUV - app.todayNewVisitors }}</strong>
+                    <span class="vc-pct">({{ app.todayUV > 0 ? Math.round((app.todayUV - app.todayNewVisitors) / app.todayUV * 100) : 0 }}%)</span>
+                  </span>
+                </div>
+              </div>
               <!-- Hourly PV/UV Line Chart -->
               <div class="chart-container" v-if="app.todayHourlyPV && app.todayHourlyPV.length > 0">
                 <Line :data="getTodayHourlyChartData(app)" :options="dualLineChartOptions" />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- New Visitors -->
+        <section class="stats-section">
+          <h2>🆕 新增访客</h2>
+          <div class="new-visitor-grid">
+            <div
+              v-for="app in stats"
+              :key="app.name"
+              class="new-visitor-card"
+            >
+              <div class="nv-header">
+                <span>{{ app.icon }} {{ app.name }}</span>
+              </div>
+              <div class="nv-row">
+                <div class="nv-item">
+                  <div class="nv-count nv-today">{{ app.todayNewVisitors }}</div>
+                  <div class="nv-label">今日新增</div>
+                </div>
+                <div class="nv-divider"></div>
+                <div class="nv-item">
+                  <div class="nv-count nv-weekly">{{ app.weeklyNewVisitors }}</div>
+                  <div class="nv-label">本周新增</div>
+                </div>
+                <div class="nv-divider"></div>
+                <div class="nv-item">
+                  <div class="nv-count nv-total">{{ app.totalNewVisitors }}</div>
+                  <div class="nv-label">总计新增</div>
+                </div>
               </div>
             </div>
           </div>
@@ -969,12 +1029,130 @@ const openFeedbackCount = computed(() => feedbacks.value.filter((f: any) => f.st
   margin-top: 4px;
 }
 
+/* Visitor Composition */
+.visitor-composition {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #f3f4f6;
+}
+
+.vc-bar {
+  display: flex;
+  height: 10px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: #f3f4f6;
+}
+
+.vc-bar-new {
+  background: linear-gradient(90deg, #f59e0b, #f97316);
+  transition: width 0.4s ease;
+  min-width: 0;
+}
+
+.vc-bar-returning {
+  background: linear-gradient(90deg, #6366f1, #818cf8);
+  transition: width 0.4s ease;
+  min-width: 0;
+}
+
+.vc-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-size: 0.8rem;
+}
+
+.vc-label-new,
+.vc-label-returning {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #6b7280;
+}
+
+.vc-label-new strong {
+  color: #f97316;
+}
+
+.vc-label-returning strong {
+  color: #6366f1;
+}
+
+.vc-pct {
+  font-size: 0.72rem;
+  color: #9ca3af;
+}
+
 .chart-container {
   position: relative;
   height: 200px;
   margin-top: 16px;
   padding-top: 8px;
   border-top: 1px solid #f3f4f6;
+}
+
+/* New Visitors */
+.new-visitor-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 16px;
+}
+
+.new-visitor-card {
+  padding: 20px;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+}
+
+.nv-header {
+  font-size: 0.9rem;
+  color: #374151;
+  margin-bottom: 12px;
+}
+
+.nv-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.nv-item {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  align-items: center;
+}
+
+.nv-divider {
+  width: 1px;
+  height: 36px;
+  background: #e5e7eb;
+}
+
+.nv-count {
+  font-size: 1.8rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.nv-today {
+  color: #f59e0b;
+}
+
+.nv-weekly {
+  color: #f97316;
+}
+
+.nv-total {
+  color: #ef4444;
+}
+
+.nv-label {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  margin-top: 4px;
 }
 
 .weekly-daily-chart {
@@ -1008,6 +1186,9 @@ const openFeedbackCount = computed(() => feedbacks.value.filter((f: any) => f.st
     grid-template-columns: 1fr;
   }
   .pv-grid {
+    grid-template-columns: 1fr;
+  }
+  .new-visitor-grid {
     grid-template-columns: 1fr;
   }
 }

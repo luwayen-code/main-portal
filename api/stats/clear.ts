@@ -61,6 +61,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       'uv_hourly:*',
       'active_visitors:*',
       'dailystats:*',
+      'all_visitors:*',
+      'stats:new_visitors:*',
     ];
 
     let deletedKeys = 0;
