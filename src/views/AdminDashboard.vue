@@ -569,14 +569,11 @@ const openFeedbackCount = computed(() => feedbacks.value.filter((f: any) => f.st
           </button>
         </div>
 
-        <!-- Active Visitors Overview -->
-        <section class="stats-section" v-if="currentApp">
-          <h2>👤 实时访客</h2>
-          <div class="active-grid">
-            <div
-              v-if="currentApp"
-              class="active-card"
-            >
+        <!-- Active & New Visitors Row -->
+        <div class="stats-row" v-if="currentApp">
+          <section class="stats-section stats-half">
+            <h2>👤 实时访客</h2>
+            <div class="active-card">
               <div class="active-icon">{{ currentApp.icon }}</div>
               <div class="active-info">
                 <span class="active-count">{{ currentApp.activeVisitors }}</span>
@@ -587,8 +584,32 @@ const openFeedbackCount = computed(() => feedbacks.value.filter((f: any) => f.st
               </div>
               <div class="pulse-dot" v-if="currentApp.activeVisitors > 0"></div>
             </div>
-          </div>
-        </section>
+          </section>
+          <section class="stats-section stats-half">
+            <h2>🆕 新增访客</h2>
+            <div class="new-visitor-card">
+              <div class="nv-header">
+                <span>{{ currentApp.icon }} {{ currentApp.name }}</span>
+              </div>
+              <div class="nv-row">
+                <div class="nv-item">
+                  <div class="nv-count nv-today">{{ currentApp.todayNewVisitors }}</div>
+                  <div class="nv-label">今日新增</div>
+                </div>
+                <div class="nv-divider"></div>
+                <div class="nv-item">
+                  <div class="nv-count nv-weekly">{{ currentApp.weeklyNewVisitors }}</div>
+                  <div class="nv-label">本周新增</div>
+                </div>
+                <div class="nv-divider"></div>
+                <div class="nv-item">
+                  <div class="nv-count nv-total">{{ currentApp.totalNewVisitors }}</div>
+                  <div class="nv-label">总计新增</div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
 
         <!-- Today's Page Views & Unique Visitors -->
         <section class="stats-section" v-if="currentApp">
@@ -640,37 +661,6 @@ const openFeedbackCount = computed(() => feedbacks.value.filter((f: any) => f.st
               <!-- Hourly PV/UV Line Chart -->
               <div class="chart-container" v-if="currentApp.todayHourlyPV && currentApp.todayHourlyPV.length > 0">
                 <Line :data="getTodayHourlyChartData(currentApp)" :options="dualLineChartOptions" />
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- New Visitors -->
-        <section class="stats-section" v-if="currentApp">
-          <h2>🆕 新增访客</h2>
-          <div class="new-visitor-grid">
-            <div
-              v-if="currentApp"
-              class="new-visitor-card"
-            >
-              <div class="nv-header">
-                <span>{{ currentApp.icon }} {{ currentApp.name }}</span>
-              </div>
-              <div class="nv-row">
-                <div class="nv-item">
-                  <div class="nv-count nv-today">{{ currentApp.todayNewVisitors }}</div>
-                  <div class="nv-label">今日新增</div>
-                </div>
-                <div class="nv-divider"></div>
-                <div class="nv-item">
-                  <div class="nv-count nv-weekly">{{ currentApp.weeklyNewVisitors }}</div>
-                  <div class="nv-label">本周新增</div>
-                </div>
-                <div class="nv-divider"></div>
-                <div class="nv-item">
-                  <div class="nv-count nv-total">{{ currentApp.totalNewVisitors }}</div>
-                  <div class="nv-label">总计新增</div>
-                </div>
               </div>
             </div>
           </div>
@@ -878,7 +868,7 @@ const openFeedbackCount = computed(() => feedbacks.value.filter((f: any) => f.st
 
 .admin-content {
   flex: 1;
-  max-width: 1100px;
+  max-width: 1200px;
   width: 100%;
   margin: 0 auto;
   padding: 24px;
@@ -892,6 +882,18 @@ const openFeedbackCount = computed(() => feedbacks.value.filter((f: any) => f.st
   font-size: 1.1rem;
   color: #374151;
   margin-bottom: 14px;
+}
+
+.stats-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+.stats-half {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
 }
 
 /* Active Visitors */
