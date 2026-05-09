@@ -265,13 +265,7 @@ function getWeeklyHourlyChartData(app: AppStats) {
     const shortDate = formatDate(day.date);
     const uvDay = app.weeklyHourlyUV.find(d => d.date === day.date);
     for (const h of day.hours) {
-      if (h.hour === 0) {
-        allLabels.push(shortDate);
-      } else if (h.hour % 4 === 0) {
-        allLabels.push(`${h.hour}:00`);
-      } else {
-        allLabels.push('');
-      }
+      allLabels.push(h.hour === 0 ? shortDate : `${h.hour}:00`);
       pvData.push(h.count);
       uvData.push(uvDay?.hours.find(uh => uh.hour === h.hour)?.count || 0);
     }
@@ -426,8 +420,7 @@ const weeklyHourlyChartOptions = {
       ticks: {
         font: { size: 10 },
         maxRotation: 0,
-        autoSkip: true,
-        maxTicksLimit: 28,
+        autoSkip: false,
       },
     },
     y: {
@@ -702,7 +695,9 @@ const openFeedbackCount = computed(() => feedbacks.value.filter((f: any) => f.st
               <!-- Hourly PV/UV Line Chart for 7 days -->
               <div class="chart-sub-title">逐时访问详情</div>
               <div class="chart-container weekly-chart" v-if="currentApp.weeklyHourlyPV && currentApp.weeklyHourlyPV.length > 0">
-                <Line :data="getWeeklyHourlyChartData(currentApp)" :options="weeklyHourlyChartOptions" />
+                <div class="weekly-chart-scroll">
+                  <Line :data="getWeeklyHourlyChartData(currentApp)" :options="weeklyHourlyChartOptions" />
+                </div>
               </div>
 
               <div class="trend-total">
@@ -1157,9 +1152,16 @@ const openFeedbackCount = computed(() => feedbacks.value.filter((f: any) => f.st
 }
 
 .weekly-chart {
-  height: 240px;
+  height: 260px;
+  overflow-x: auto;
+  overflow-y: hidden;
   border-top: none;
   padding-top: 0;
+}
+
+.weekly-chart-scroll {
+  min-width: 4200px;
+  height: 100%;
 }
 
 .chart-sub-title {
