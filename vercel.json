@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/pdf-tools/:path*",
+      "destination": "https://pdf-tools-blue.vercel.app/:path*"
+    },
+    {
       "source": "/excel-tools/:path*",
       "destination": "https://excel-tools-gilt.vercel.app/:path*"
     },
