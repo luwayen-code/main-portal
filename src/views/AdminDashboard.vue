@@ -265,7 +265,7 @@ function getWeeklyHourlyChartData(app: AppStats) {
     const shortDate = formatDate(day.date);
     const uvDay = app.weeklyHourlyUV.find(d => d.date === day.date);
     for (const h of day.hours) {
-      allLabels.push(h.hour === 0 ? shortDate : `${h.hour}h`);
+      allLabels.push(h.hour === 0 ? shortDate : `${h.hour}:00`);
       pvData.push(h.count);
       uvData.push(uvDay?.hours.find(uh => uh.hour === h.hour)?.count || 0);
     }
@@ -420,12 +420,7 @@ const weeklyHourlyChartOptions = {
       ticks: {
         font: { size: 10 },
         maxRotation: 0,
-        autoSkip: true,
-        maxTicksLimit: 7,
-        callback(this: { getLabelForValue: (idx: number) => string }, _tick: { index: number }, label: string) {
-          if (/^\d{2}-\d{2}$/.test(label)) return label;
-          return '';
-        },
+        autoSkip: false,
       },
     },
     y: {
@@ -449,6 +444,11 @@ onUnmounted(() => {
 
 // --- Feedback management ---
 const activeTab = ref<'stats' | 'feedback'>('stats');
+
+// App selector tab
+const selectedApp = ref<string>('');
+
+const currentApp = computed(() => stats.value.find(a => a.name === selectedApp.value) || stats.value[0] || null);
 const feedbacks = ref<any[]>([]);
 const fbLoading = ref(false);
 const fbError = ref('');
@@ -557,159 +557,141 @@ const openFeedbackCount = computed(() => feedbacks.value.filter((f: any) => f.st
         </div>
 
         <template v-else>
-        <!-- Active Visitors Overview -->
-        <section class="stats-section">
-          <h2>👤 实时访客</h2>
-          <div class="active-grid">
-            <div
-              v-for="app in stats"
-              :key="app.name"
-              class="active-card"
-            >
-              <div class="active-icon">{{ app.icon }}</div>
+        <!-- App Selector Tabs -->
+        <div class="stats-type-tabs">
+          <button
+            v-for="app in stats"
+            :key="app.name"
+            :class="{ active: currentApp?.name === app.name }"
+            @click="selectedApp = app.name"
+          >
+            {{ app.icon }} {{ app.name }}
+          </button>
+        </div>
+
+        <!-- Active & New Visitors Row -->
+        <div class="stats-row" v-if="currentApp">
+          <section class="stats-section stats-half">
+            <h2>👤 实时访客</h2>
+            <div class="active-card">
+              <div class="active-icon">{{ currentApp.icon }}</div>
               <div class="active-info">
-                <span class="active-count">{{ app.activeVisitors }}</span>
-                <span class="active-label">{{ app.name }} 在线访客</span>
-                <span class="active-time" v-if="app.lastActiveTime">
-                  最新活动 {{ formatActiveTime(app.lastActiveTime) }}
+                <span class="active-count">{{ currentApp.activeVisitors }}</span>
+                <span class="active-label">{{ currentApp.name }} 在线访客</span>
+                <span class="active-time" v-if="currentApp.lastActiveTime">
+                  最新活动 {{ formatActiveTime(currentApp.lastActiveTime) }}
                 </span>
               </div>
-              <div class="pulse-dot" v-if="app.activeVisitors > 0"></div>
+              <div class="pulse-dot" v-if="currentApp.activeVisitors > 0"></div>
             </div>
-          </div>
-        </section>
-
-        <!-- Today's Page Views & Unique Visitors -->
-        <section class="stats-section">
-          <h2>📊 今日访问量</h2>
-          <div class="pv-grid">
-            <div
-              v-for="app in stats"
-              :key="app.name"
-              class="pv-card"
-            >
-              <div class="pv-header">
-                <span>{{ app.icon }} {{ app.name }}</span>
-              </div>
-              <div class="pv-uv-row">
-                <div class="pv-uv-item">
-                  <div class="pv-count pv-color">{{ app.todayPV }}</div>
-                  <div class="pv-label">页面浏览量 (PV)</div>
-                </div>
-                <div class="pv-uv-divider"></div>
-                <div class="pv-uv-item">
-                  <div class="pv-count uv-color">{{ app.todayUV }}</div>
-                  <div class="pv-label">独立访客 (UV)</div>
-                </div>
-              </div>
-              <!-- Visitor Composition (New vs Returning) -->
-              <div class="visitor-composition" v-if="app.todayUV > 0">
-                <div class="vc-bar">
-                  <div
-                    class="vc-bar-new"
-                    :style="{ width: (app.todayNewVisitors / app.todayUV * 100) + '%' }"
-                    :title="'新访客 ' + app.todayNewVisitors + ' 人'"
-                  ></div>
-                  <div
-                    class="vc-bar-returning"
-                    :style="{ width: ((app.todayUV - app.todayNewVisitors) / app.todayUV * 100) + '%' }"
-                    :title="'老访客 ' + (app.todayUV - app.todayNewVisitors) + ' 人'"
-                  ></div>
-                </div>
-                <div class="vc-labels">
-                  <span class="vc-label-new">
-                    🆕 新访客 <strong>{{ app.todayNewVisitors }}</strong>
-                    <span class="vc-pct">({{ app.todayUV > 0 ? Math.round(app.todayNewVisitors / app.todayUV * 100) : 0 }}%)</span>
-                  </span>
-                  <span class="vc-label-returning">
-                    🔄 老访客 <strong>{{ app.todayUV - app.todayNewVisitors }}</strong>
-                    <span class="vc-pct">({{ app.todayUV > 0 ? Math.round((app.todayUV - app.todayNewVisitors) / app.todayUV * 100) : 0 }}%)</span>
-                  </span>
-                </div>
-              </div>
-              <!-- Hourly PV/UV Line Chart -->
-              <div class="chart-container" v-if="app.todayHourlyPV && app.todayHourlyPV.length > 0">
-                <Line :data="getTodayHourlyChartData(app)" :options="dualLineChartOptions" />
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- New Visitors -->
-        <section class="stats-section">
-          <h2>🆕 新增访客</h2>
-          <div class="new-visitor-grid">
-            <div
-              v-for="app in stats"
-              :key="app.name"
-              class="new-visitor-card"
-            >
+          </section>
+          <section class="stats-section stats-half">
+            <h2>🆕 新增访客</h2>
+            <div class="new-visitor-card">
               <div class="nv-header">
-                <span>{{ app.icon }} {{ app.name }}</span>
+                <span>{{ currentApp.icon }} {{ currentApp.name }}</span>
               </div>
               <div class="nv-row">
                 <div class="nv-item">
-                  <div class="nv-count nv-today">{{ app.todayNewVisitors }}</div>
+                  <div class="nv-count nv-today">{{ currentApp.todayNewVisitors }}</div>
                   <div class="nv-label">今日新增</div>
                 </div>
                 <div class="nv-divider"></div>
                 <div class="nv-item">
-                  <div class="nv-count nv-weekly">{{ app.weeklyNewVisitors }}</div>
+                  <div class="nv-count nv-weekly">{{ currentApp.weeklyNewVisitors }}</div>
                   <div class="nv-label">本周新增</div>
                 </div>
                 <div class="nv-divider"></div>
                 <div class="nv-item">
-                  <div class="nv-count nv-total">{{ app.totalNewVisitors }}</div>
+                  <div class="nv-count nv-total">{{ currentApp.totalNewVisitors }}</div>
                   <div class="nv-label">总计新增</div>
                 </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- Today's Page Views & Unique Visitors -->
+        <section class="stats-section" v-if="currentApp">
+          <h2>📊 今日访问量</h2>
+          <div class="pv-grid">
+            <div
+              v-if="currentApp"
+              class="pv-card"
+            >
+              <div class="pv-header">
+                <span>{{ currentApp.icon }} {{ currentApp.name }}</span>
+              </div>
+              <div class="pv-uv-row">
+                <div class="pv-uv-item">
+                  <div class="pv-count pv-color">{{ currentApp.todayPV }}</div>
+                  <div class="pv-label">页面浏览量 (PV)</div>
+                </div>
+                <div class="pv-uv-divider"></div>
+                <div class="pv-uv-item">
+                  <div class="pv-count uv-color">{{ currentApp.todayUV }}</div>
+                  <div class="pv-label">独立访客 (UV)</div>
+                </div>
+              </div>
+              <!-- Visitor Composition (New vs Returning) -->
+              <div class="visitor-composition" v-if="currentApp.todayUV > 0">
+                <div class="vc-bar">
+                  <div
+                    class="vc-bar-new"
+                    :style="{ width: (currentApp.todayNewVisitors / currentApp.todayUV * 100) + '%' }"
+                    :title="'新访客 ' + currentApp.todayNewVisitors + ' 人'"
+                  ></div>
+                  <div
+                    class="vc-bar-returning"
+                    :style="{ width: ((currentApp.todayUV - currentApp.todayNewVisitors) / currentApp.todayUV * 100) + '%' }"
+                    :title="'老访客 ' + (currentApp.todayUV - currentApp.todayNewVisitors) + ' 人'"
+                  ></div>
+                </div>
+                <div class="vc-labels">
+                  <span class="vc-label-new">
+                    🆕 新访客 <strong>{{ currentApp.todayNewVisitors }}</strong>
+                    <span class="vc-pct">({{ currentApp.todayUV > 0 ? Math.round(currentApp.todayNewVisitors / currentApp.todayUV * 100) : 0 }}%)</span>
+                  </span>
+                  <span class="vc-label-returning">
+                    🔄 老访客 <strong>{{ currentApp.todayUV - currentApp.todayNewVisitors }}</strong>
+                    <span class="vc-pct">({{ currentApp.todayUV > 0 ? Math.round((currentApp.todayUV - currentApp.todayNewVisitors) / currentApp.todayUV * 100) : 0 }}%)</span>
+                  </span>
+                </div>
+              </div>
+              <!-- Hourly PV/UV Line Chart -->
+              <div class="chart-container" v-if="currentApp.todayHourlyPV && currentApp.todayHourlyPV.length > 0">
+                <Line :data="getTodayHourlyChartData(currentApp)" :options="dualLineChartOptions" />
               </div>
             </div>
           </div>
         </section>
 
         <!-- Weekly Trend -->
-        <section class="stats-section">
+        <section class="stats-section" v-if="currentApp">
           <h2>📈 近7天趋势</h2>
           <div class="trend-container">
             <div
-              v-for="app in stats"
-              :key="app.name"
+              v-if="currentApp"
               class="trend-card"
             >
-              <div class="trend-header">{{ app.icon }} {{ app.name }}</div>
-
-              <!-- Daily Bar Chart -->
-              <div class="trend-chart">
-                <div
-                  v-for="(day, idx) in app.weeklyPV"
-                  :key="idx"
-                  class="chart-bar-wrapper"
-                >
-                  <div
-                    class="chart-bar"
-                    :style="{
-                      height: getBarHeight(day.count, Math.max(...app.weeklyPV.map(d => d.count), 1)) + '%'
-                    }"
-                    :title="`${formatDate(day.date)}: ${day.count} PV`"
-                  ></div>
-                  <span class="chart-label">{{ formatDate(day.date) }}</span>
-                </div>
-              </div>
+              <div class="trend-header">{{ currentApp.icon }} {{ currentApp.name }}</div>
 
               <!-- Daily PV/UV Line Chart (7 data points) -->
               <div class="chart-sub-title">每日 PV / UV 趋势</div>
-              <div class="chart-container weekly-daily-chart" v-if="app.weeklyPV.length > 0">
-                <Line :data="getWeeklyDailyChartData(app)" :options="weeklyDailyChartOptions" />
+              <div class="chart-container weekly-daily-chart" v-if="currentApp.weeklyPV.length > 0">
+                <Line :data="getWeeklyDailyChartData(currentApp)" :options="weeklyDailyChartOptions" />
               </div>
 
               <!-- Hourly PV/UV Line Chart for 7 days -->
               <div class="chart-sub-title">逐时访问详情</div>
-              <div class="chart-container weekly-chart" v-if="app.weeklyHourlyPV && app.weeklyHourlyPV.length > 0">
-                <Line :data="getWeeklyHourlyChartData(app)" :options="weeklyHourlyChartOptions" />
+              <div class="chart-container weekly-chart" v-if="currentApp.weeklyHourlyPV && currentApp.weeklyHourlyPV.length > 0">
+                <div class="weekly-chart-scroll">
+                  <Line :data="getWeeklyHourlyChartData(currentApp)" :options="weeklyHourlyChartOptions" />
+                </div>
               </div>
 
               <div class="trend-total">
-                7日合计: {{ app.weeklyPV.reduce((sum, d) => sum + d.count, 0) }} PV / {{ app.weeklyUV.reduce((sum, d) => sum + d.count, 0) }} UV
+                7日合计: {{ currentApp.weeklyPV.reduce((sum, d) => sum + d.count, 0) }} PV / {{ currentApp.weeklyUV.reduce((sum, d) => sum + d.count, 0) }} UV
               </div>
             </div>
           </div>
@@ -886,7 +868,7 @@ const openFeedbackCount = computed(() => feedbacks.value.filter((f: any) => f.st
 
 .admin-content {
   flex: 1;
-  max-width: 1100px;
+  max-width: 1200px;
   width: 100%;
   margin: 0 auto;
   padding: 24px;
@@ -902,10 +884,22 @@ const openFeedbackCount = computed(() => feedbacks.value.filter((f: any) => f.st
   margin-bottom: 14px;
 }
 
+.stats-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+.stats-half {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+}
+
 /* Active Visitors */
 .active-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 16px;
 }
 
@@ -975,7 +969,7 @@ const openFeedbackCount = computed(() => feedbacks.value.filter((f: any) => f.st
 /* Page Views & UV */
 .pv-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
   gap: 16px;
 }
 
@@ -1095,7 +1089,7 @@ const openFeedbackCount = computed(() => feedbacks.value.filter((f: any) => f.st
 /* New Visitors */
 .new-visitor-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
   gap: 16px;
 }
 
@@ -1160,9 +1154,16 @@ const openFeedbackCount = computed(() => feedbacks.value.filter((f: any) => f.st
 }
 
 .weekly-chart {
-  height: 240px;
+  height: 260px;
+  overflow-x: auto;
+  overflow-y: hidden;
   border-top: none;
   padding-top: 0;
+}
+
+.weekly-chart-scroll {
+  min-width: 4200px;
+  height: 100%;
 }
 
 .chart-sub-title {
@@ -1177,7 +1178,7 @@ const openFeedbackCount = computed(() => feedbacks.value.filter((f: any) => f.st
 /* Weekly Trend */
 .trend-container {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(520px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(520px, 1fr));
   gap: 16px;
 }
 
@@ -1412,6 +1413,46 @@ const openFeedbackCount = computed(() => feedbacks.value.filter((f: any) => f.st
 
 .modal-confirm:hover:not(:disabled) {
   background: #b91c1c;
+}
+
+/* Stats Type Sub-Tabs */
+.stats-type-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  background: #fff;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  flex-wrap: wrap;
+}
+
+.stats-type-tabs button {
+  flex: 1;
+  min-width: 120px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #6b7280;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.stats-type-tabs button.active {
+  background: #4f46e5;
+  color: #fff;
+}
+
+.stats-type-tabs button:not(.active):hover {
+  background: #f3f4f6;
+  color: #374151;
 }
 
 /* Tab Bar */

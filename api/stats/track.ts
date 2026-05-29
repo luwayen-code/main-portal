@@ -87,18 +87,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Hourly PV
     await redis.hincrby(statsKey, `h${currentHour}_pv`, 1);
 
-    // Hourly UV (only increment if visitor is new to this hour)
-    const hourlyUVKey = `uv_hourly:${app}:${today}:${currentHour}`;
-    const isNewHourlyUV = await redis.sadd(hourlyUVKey, visitorHash);
-    if (isNewHourlyUV > 0) {
-      await redis.hincrby(statsKey, `h${currentHour}_uv`, 1);
-    }
-
     // Daily UV (only increment if visitor is new today)
+    // Hourly UV is tied to the hour of the visitor's FIRST visit of the day,
+    // so that the sum of hourly UV always equals the daily UV.
     const dailyUVKey = `uv:${app}:${today}`;
     const isNewDailyUV = await redis.sadd(dailyUVKey, visitorHash);
     if (isNewDailyUV > 0) {
       await redis.hincrby(statsKey, 'uv', 1);
+      await redis.hincrby(statsKey, `h${currentHour}_uv`, 1);
     }
 
     // New visitor tracking (first time ever globally)
