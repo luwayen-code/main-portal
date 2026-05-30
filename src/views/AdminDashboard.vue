@@ -65,7 +65,26 @@ const paused = ref(false);
 const showClearConfirm = ref(false);
 const clearing = ref(false);
 const exporting = ref(false);
-let refreshTimer: ReturnType<typeof setInterval> | null = null;
+let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** 根据北京时间返回下次刷新间隔（毫秒）
+ *  白天 8:00-22:00 → 3分钟，夜间 → 8分钟
+ *  平均约 4.2 分钟，比固定 2 分钟降低约 52% */
+function getRefreshInterval(): number {
+  const hour = new Date().getUTCHours() + 8; // Beijing time (UTC+8)
+  const beijingHour = hour >= 24 ? hour - 24 : hour;
+  const isDaytime = beijingHour >= 8 && beijingHour < 22;
+  return isDaytime ? 180_000 : 480_000; // 3 min / 8 min
+}
+
+function scheduleNextRefresh() {
+  if (!refreshTimer) return; // cleared on unmount
+  const delay = getRefreshInterval();
+  refreshTimer = setTimeout(() => {
+    fetchStats();
+    scheduleNextRefresh();
+  }, delay);
+}
 
 async function fetchStats() {
   try {
@@ -434,12 +453,12 @@ const weeklyHourlyChartOptions = {
 onMounted(() => {
   fetchStats();
   fetchFeedbacks();
-  // Auto-refresh every 2 minutes (reduced from 30s to avoid hitting Upstash free tier rate limit)
-  refreshTimer = setInterval(fetchStats, 120_000);
+  // Adaptive refresh: 3min daytime (8-22), 8min nighttime — cuts avg frequency by ~52%
+  scheduleNextRefresh();
 });
 
 onUnmounted(() => {
-  if (refreshTimer) clearInterval(refreshTimer);
+  if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; }
 });
 
 // --- Feedback management ---
