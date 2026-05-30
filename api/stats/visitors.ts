@@ -45,6 +45,7 @@ interface AppInfo {
 const APPS: AppInfo[] = [
   { key: 'it-tools', name: 'IT Tools', icon: '🛠️' },
   { key: 'excel-tools', name: 'EasyExcel', icon: '📊' },
+  { key: 'pdf-tools', name: 'PDF工具箱', icon: '📄' },
 ];
 
 function getTodayStr(): string {

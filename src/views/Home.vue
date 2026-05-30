@@ -22,6 +22,13 @@ const apps: AppItem[] = [
     icon: '📊',
     color: '#1a73e8',
   },
+  {
+    name: 'PDF工具箱',
+    description: 'PDF万能工具箱：合并、拆分、压缩、OCR、水印、加密、表单等21项功能',
+    path: '/pdf-tools',
+    icon: '📄',
+    color: '#e74c3c',
+  },
 ];
 </script>
 

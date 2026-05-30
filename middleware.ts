@@ -1,10 +1,11 @@
 // Sub-app prefixes to track
-const TRACKED_PREFIXES = ['/it-tools', '/excel-tools'];
+const TRACKED_PREFIXES = ['/it-tools', '/excel-tools', '/pdf-tools'];
 
 // External deployment URLs for each sub-app
 const EXTERNAL_URLS: Record<string, string> = {
   'it-tools': 'https://it-tools-six-gules.vercel.app',
   'excel-tools': 'https://excel-tools-gilt.vercel.app',
+  'pdf-tools': 'https://pdf-tools-blue.vercel.app',
 };
 
 // Shared tracking token (must match api/stats/track.ts)
@@ -171,5 +172,5 @@ export default async function middleware(request: Request) {
 }
 
 export const config = {
-  matcher: ['/it-tools/:path*', '/excel-tools/:path*'],
+  matcher: ['/it-tools/:path*', '/excel-tools/:path*', '/pdf-tools/:path*'],
 };

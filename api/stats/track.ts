@@ -14,7 +14,7 @@ function getBeijingHour(): number {
   return new Date(Date.now() + BEIJING_OFFSET_MS).getUTCHours();
 }
 
-const VALID_APPS = new Set(['it-tools', 'excel-tools']);
+const VALID_APPS = new Set(['it-tools', 'excel-tools', 'pdf-tools']);
 
 // Simple shared token for client-side tracking beacons
 const TRACK_TOKEN = process.env.TRACK_TOKEN || 'xingwhy-track-2026';
